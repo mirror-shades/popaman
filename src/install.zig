@@ -147,26 +147,24 @@ pub fn install_portman() !void {
         }
         root_dir = arg;
     }
+    
+    if (root_dir.len == 0) {
+        var buffer: [std.fs.max_path_bytes]u8 = undefined;
+        const exe_path = try std.fs.selfExePath(&buffer);
+        const exe_dir = std.fs.path.dirname(exe_path) orelse ".";
+        const portman_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
         
-    if (root_dir.len > 0) {
-        // Check if directory exists
-        std.fs.cwd().access(root_dir, .{}) catch {
-            std.debug.print("Error: Directory '{s}' does not exist\n", .{root_dir});
-            return error.InvalidInstallPath;
-        };
-        
-        // Check for existing portman directory
-        const portman_path = try std.fs.path.join(allocator, &[_][]const u8{root_dir, "portman"});
         if (std.fs.cwd().access(portman_path, .{}) catch null != null) {
             if (force_install) {
                 std.debug.print("Force removing existing installation at '{s}'\n", .{portman_path});
                 try std.fs.deleteTreeAbsolute(portman_path);
             } else {
-                std.debug.print("Error: Directory '{s}' already contains a 'portman' directory\n", .{root_dir});
+                std.debug.print("Error: Directory already contains a 'portman' directory\n", .{});
                 return error.PortmanDirectoryExists;
             }
         }
     }
+    
         
     std.debug.print("Installing Portman...\n", .{});
     try create_portman_directory(root_dir);

@@ -16,15 +16,51 @@ const Package = struct {
     description: []const u8,
 };
 
+fn parse_package_info(allocator: std.mem.Allocator, keyword: []const u8) !?Package {
+    // Create buffer for executable path
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+    
+    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "..", "lib", "packages.json"});
+    defer allocator.free(packages_path);
+    
+    const file = try std.fs.cwd().openFile(packages_path, .{});
+    defer file.close();
+    
+    const content = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+    defer allocator.free(content);
+
+    // Parse the JSON content
+    const parsed = try std.json.parseFromSlice(
+        PackageFile,
+        allocator,
+        content,
+        .{},
+    );
+    defer parsed.deinit();
+
+    // Search through packages for matching keyword
+    for (parsed.value.package) |package| {
+        if (std.mem.eql(u8, package.keyword, keyword)) {
+            // Create a new Package with duplicated strings
+            return Package{
+                .name = try allocator.dupe(u8, package.name),
+                .path = try allocator.dupe(u8, package.path),
+                .keyword = try allocator.dupe(u8, package.keyword),
+                .description = try allocator.dupe(u8, package.description),
+            };
+        }
+    }
+    
+    return null;
+}
+
 fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
     std.debug.print("Getting packages...\n", .{});
     
     // Create buffer for executable path
     var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
     const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
-    
-    // Debug: Print executable directory
-    std.debug.print("Executable directory: {s}\n", .{exe_dir});
     
     const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "..", "lib", "packages.json"});
     defer allocator.free(packages_path);
@@ -48,9 +84,11 @@ fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
     const packages = parsed.value.package;
     var keywords = try allocator.alloc([]const u8, packages.len);
     
-    // Create duplicates of the strings to ensure they remain valid
+    // Get keywords from Package objects using parse_package_info
     for (packages, 0..) |package, i| {
-        keywords[i] = try allocator.dupe(u8, package.keyword);
+        if (try parse_package_info(allocator, package.keyword)) |pkg| {
+            keywords[i] = pkg.keyword;
+        }
     }
     
     return keywords;
