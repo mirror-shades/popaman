@@ -3,7 +3,20 @@
 
 const std = @import("std");
 
-fn get_packages(allocator: std.mem.Allocator) !void {
+// Define the root structure
+const PackageFile = struct {
+    package: []Package,
+};
+
+// Update Package struct to match your JSON structure
+const Package = struct {
+    name: []const u8,
+    path: []const u8,
+    keyword: []const u8,
+    description: []const u8,
+};
+
+fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
     std.debug.print("Getting packages...\n", .{});
     
     // Create buffer for executable path
@@ -13,23 +26,46 @@ fn get_packages(allocator: std.mem.Allocator) !void {
     // Debug: Print executable directory
     std.debug.print("Executable directory: {s}\n", .{exe_dir});
     
-    // Go up from bin/ to the project root, then into lib/
-    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "..", "lib", "packages.toml"});
+    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "..", "lib", "packages.json"});
     defer allocator.free(packages_path);
-    
-    // Debug: Print the final path
-    std.debug.print("Attempting to read from path: {s}\n", .{packages_path});
     
     const file = try std.fs.cwd().openFile(packages_path, .{});
     defer file.close();
     
     const content = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
     defer allocator.free(content);
+
+    // Parse the JSON content
+    const parsed = try std.json.parseFromSlice(
+        PackageFile,
+        allocator,
+        content,
+        .{},
+    );
+    defer parsed.deinit();
+
+    // Access the parsed data through the package field
+    const packages = parsed.value.package;
+    var keywords = try allocator.alloc([]const u8, packages.len);
     
-    std.debug.print("File contents:\n{s}\n", .{content});
+    // Create duplicates of the strings to ensure they remain valid
+    for (packages, 0..) |package, i| {
+        keywords[i] = try allocator.dupe(u8, package.keyword);
+    }
+    
+    return keywords;
 }
 
 pub fn run_portman() !void {
     std.debug.print("Running Portman...\n", .{});
-    try get_packages(std.heap.page_allocator);
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    
+    const keywords = try get_packages(allocator);
+    // No need to manually free keywords as arena allocator will handle it
+    
+    for (keywords) |keyword| {
+        std.debug.print("Keyword: {s}\n", .{keyword});
+    }
 }

@@ -54,19 +54,27 @@ fn create_portman_directory(_root_dir: []const u8) !void {
         }
     };
 
-    // Create packages.toml
-    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{lib_path, "packages.toml"});
-    std.debug.print("Creating packages.toml: {s}\n", .{packages_path});
+    // Create packages.json
+    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{lib_path, "packages.json"});
+    std.debug.print("Creating packages.json: {s}\n", .{packages_path});
     const file = std.fs.createFileAbsolute(packages_path, .{ .exclusive = true }) catch |err| {
         if (err != error.PathAlreadyExists) {
-            std.debug.print("Error creating packages.toml: {any}\n", .{err});
+            std.debug.print("Error creating packages.json: {any}\n", .{err});
             return err;
         } else {
-            std.debug.print("packages.toml already exists\n", .{});
+            std.debug.print("packages.json already exists\n", .{});
             return;
         }
     };
-    file.close();
+    defer file.close();
+
+    // Write initial JSON structure
+    try file.writeAll(
+        \\{
+        \\  "package": []
+        \\}
+        \\
+    );
 
     // Copy executable if needed
     if (!std.mem.eql(u8, std.fs.path.basename(exe_dir), "bin")) {
@@ -95,7 +103,7 @@ pub fn verify_install() !bool {
     
     const packages_path = try std.fs.path.join(
         allocator, 
-        &[_][]const u8{parent_dir, "lib", "packages.toml"}
+        &[_][]const u8{parent_dir, "lib", "packages.json"}
     );
     
     // Check if both the file exists and is accessible
@@ -103,7 +111,7 @@ pub fn verify_install() !bool {
         switch (err) {
             error.FileNotFound => return false,
             error.AccessDenied => {
-                std.debug.print("Warning: Found packages.toml but cannot access it\n", .{});
+                std.debug.print("Warning: Found packages.json but cannot access it\n", .{});
                 return false;
             },
             else => return err,
@@ -114,10 +122,10 @@ pub fn verify_install() !bool {
     return true;
 }
 
-// set up the install process
 pub fn install_portman() !void {
     var root_dir: []const u8 = ""; // Default install path
-    // Use arena allocator for args
+    var force_install = false;
+    
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -125,23 +133,39 @@ pub fn install_portman() !void {
     var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
     _ = args.skip(); // Skip executable name
+    
+    // Process arguments
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "-f")) {
+            force_install = true;
+            continue;
+        }
+        // If we already have a root_dir, this is an unexpected argument
+        if (root_dir.len > 0) {
+            std.debug.print("Error: Unexpected argument '{s}'\n", .{arg});
+            return error.UnexpectedArgument;
+        }
+        root_dir = arg;
+    }
         
-    if (args.next()) |arg| {
+    if (root_dir.len > 0) {
         // Check if directory exists
-        std.fs.cwd().access(arg, .{}) catch {
-            std.debug.print("Error: Directory '{s}' does not exist\n", .{arg});
+        std.fs.cwd().access(root_dir, .{}) catch {
+            std.debug.print("Error: Directory '{s}' does not exist\n", .{root_dir});
             return error.InvalidInstallPath;
         };
         
-        // Check if portman directory already exists in the specified path
-        const portman_path = try std.fs.path.join(allocator, &[_][]const u8{arg, "portman"});
+        // Check for existing portman directory
+        const portman_path = try std.fs.path.join(allocator, &[_][]const u8{root_dir, "portman"});
         if (std.fs.cwd().access(portman_path, .{}) catch null != null) {
-            std.debug.print("Error: Directory '{s}' already contains a 'portman' directory\n", .{arg});
-            return error.PortmanDirectoryExists;
+            if (force_install) {
+                std.debug.print("Force removing existing installation at '{s}'\n", .{portman_path});
+                try std.fs.deleteTreeAbsolute(portman_path);
+            } else {
+                std.debug.print("Error: Directory '{s}' already contains a 'portman' directory\n", .{root_dir});
+                return error.PortmanDirectoryExists;
+            }
         }
-        
-        // Set custom install path
-        root_dir = arg;
     }
         
     std.debug.print("Installing Portman...\n", .{});
