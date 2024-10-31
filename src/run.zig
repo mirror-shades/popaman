@@ -14,6 +14,7 @@ const Package = struct {
     path: []const u8,
     keyword: []const u8,
     description: []const u8,
+    global: bool,
 };
 
 fn readLineFixed() ![]const u8 {
@@ -64,11 +65,67 @@ fn parse_package_info(allocator: std.mem.Allocator, keyword: []const u8) !?Packa
                 .path = try allocator.dupe(u8, package.path),
                 .keyword = try allocator.dupe(u8, package.keyword),
                 .description = try allocator.dupe(u8, package.description),
+                .global = package.global,  // Add this field
             };
         }
     }
     
     return null;
+}
+
+
+fn add_package_info(allocator: std.mem.Allocator, package: Package) !void {
+    // Get executable directory path
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+    
+    // Construct path to packages.json
+    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "..", "lib", "packages.json"});
+    defer allocator.free(packages_path);
+    
+    // Read existing file
+    const file = try std.fs.cwd().openFile(packages_path, .{ .mode = .read_write });
+    defer file.close();
+    
+    const content = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+    defer allocator.free(content);
+
+    // Parse existing JSON
+    const parsed = try std.json.parseFromSlice(
+        PackageFile,
+        allocator,
+        content,
+        .{},
+    );
+    defer parsed.deinit();
+
+    // Create new packages array with one more slot
+    var new_packages = try allocator.alloc(Package, parsed.value.package.len + 1);
+    defer allocator.free(new_packages);
+
+    // Copy existing packages
+    @memcpy(new_packages[0..parsed.value.package.len], parsed.value.package);
+
+    // Add new package
+    new_packages[new_packages.len - 1] = package;
+
+    // Create new PackageFile with updated packages
+    const new_package_file = PackageFile{ .package = new_packages };
+
+    // Convert to JSON string
+    var string = std.ArrayList(u8).init(allocator);
+    defer string.deinit();
+    try std.json.stringify(new_package_file, .{}, string.writer());
+
+    // Write back to file
+    try file.seekTo(0);
+    try file.writeAll(string.items);
+    try file.setEndPos(string.items.len);
+}
+
+fn remove_package_info(allocator: std.mem.Allocator, package: Package) !void {
+    _ = allocator;
+    _ = package;
 }
 
 fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
@@ -239,7 +296,7 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
     };
     defer dir.close();
 
-const package_name = std.fs.path.basename(package_path);
+    const package_name = std.fs.path.basename(package_path);
     std.debug.print("Package name: {s}\n", .{package_name});
 
     // Find executables
@@ -289,7 +346,15 @@ const package_name = std.fs.path.basename(package_path);
         try createGlobalScript(allocator, exe_dir, keyword_copy, package_name, selected_exe);
     }
 
-    // TODO: Save package metadata to packages.json
+    // Create and save package metadata
+    const new_package = Package{
+        .name = try allocator.dupe(u8, package_name),
+        .path = try allocator.dupe(u8, selected_exe),
+        .keyword = keyword_copy,
+        .description = desc_copy,
+        .global = is_global,  // Add this field
+    };
+    try add_package_info(allocator, new_package);
 }
 
 fn globalize_package(allocator: std.mem.Allocator, package: []const u8, is_add: bool) !void {
@@ -305,7 +370,6 @@ fn remove_package(allocator: std.mem.Allocator, package: []const u8) !void {
     _ = allocator;
     std.debug.print("Removing package: {s}\n", .{package});
 }
-
 
 pub fn run_portman() !void {
     std.debug.print("Running Portman...\n", .{});
