@@ -237,7 +237,8 @@ fn selectExecutable(exe_paths: std.ArrayList([]const u8)) ![]const u8 {
     }
 
     while (true) {
-        std.debug.print("Available executables:\n", .{});
+        std.debug.print("Available executables\n", .{});
+        std.debug.print("if you are unsure refer to the tools documentation\n", .{});
         for (exe_paths.items, 0..) |exe, i| {
             std.debug.print("{d}: {s}\n", .{ i + 1, exe });
         }

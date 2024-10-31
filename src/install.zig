@@ -187,7 +187,7 @@ pub fn install_portman() !void {
     std.debug.print("Installing Portman...\n", .{});
     try create_portman_directory(root_dir);
 
-    const install_bat_path = try std.fs.path.join(allocator, &[_][]const u8{installation_dir, "lib", "install.bat"});
+    const install_bat_path = try std.fs.path.join(allocator, &[_][]const u8{installation_dir, "lib", "PATH.bat"});
     try createInstallBat(install_bat_path);
 
     // Add bin directory to PATH if not skipped
