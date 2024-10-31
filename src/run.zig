@@ -433,12 +433,36 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
     try add_package_info(allocator, new_package);
 }
 
-fn globalize_package(allocator: std.mem.Allocator, package: []const u8, is_add: bool) !void {
-    _ = allocator;
-    if (is_add) {
-        std.debug.print("Adding package to global list: {s}\n", .{package});
+fn globalize_package(allocator: std.mem.Allocator, keyword: []const u8, is_add: bool) !void {
+    // Get package info
+    if (try parse_package_info(allocator, keyword)) |package| {
+        // Get executable directory path
+        var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+
+        if (is_add) {
+            // Create the batch file
+            try createGlobalScript(allocator, exe_dir, package.keyword, package.name, package.path);
+            std.debug.print("Added global script for: {s}\n", .{package.keyword});
+        } else {
+            // Remove the batch file
+            const batch_path = try std.fs.path.join(allocator, &[_][]const u8{
+                exe_dir,
+                "..",
+                "bin",
+                try std.fmt.allocPrint(allocator, "{s}.cmd", .{package.keyword})
+            });
+            defer allocator.free(batch_path);
+
+            std.fs.deleteFileAbsolute(batch_path) catch |err| {
+                std.debug.print("Warning: Could not delete batch file: {any}\n", .{err});
+                return err;
+            };
+            std.debug.print("Removed global script for: {s}\n", .{package.keyword});
+        }
     } else {
-        std.debug.print("Removing package from global list: {s}\n", .{package});
+        std.debug.print("Package not found: {s}\n", .{keyword});
+        return error.PackageNotFound;
     }
 }
 
