@@ -110,9 +110,123 @@ fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
     return keywords;
 }
 
-fn install_package(allocator: std.mem.Allocator, package: []const u8, is_global: bool) !void {
-    
+fn findExecutables(allocator: std.mem.Allocator, dir: std.fs.Dir, package_path: []const u8) !std.ArrayList([]const u8) {
+    var exe_paths = std.ArrayList([]const u8).init(allocator);
+    errdefer {
+        for (exe_paths.items) |path| {
+            allocator.free(path);
+        }
+        exe_paths.deinit();
+    }
 
+    var walker = try dir.walk(allocator);
+    defer walker.deinit();
+
+    while (try walker.next()) |entry| {
+        if (entry.kind == .file) {
+            const full_path = try std.fs.path.join(allocator, &[_][]const u8{ package_path, entry.path });
+            defer allocator.free(full_path);
+            
+            if (std.mem.endsWith(u8, entry.path, ".exe") or 
+                std.mem.endsWith(u8, entry.path, ".sh") or 
+                !std.mem.containsAtLeast(u8, entry.path, 1, ".")) {
+                try exe_paths.append(try allocator.dupe(u8, entry.path));
+            }
+        }
+    }
+
+    return exe_paths;
+}
+
+fn selectExecutable(exe_paths: std.ArrayList([]const u8)) ![]const u8 {
+    if (exe_paths.items.len == 0) {
+        return error.NoExecutablesFound;
+    }
+
+    while (true) {
+        std.debug.print("Available executables:\n", .{});
+        for (exe_paths.items, 0..) |exe, i| {
+            std.debug.print("{d}: {s}\n", .{ i + 1, exe });
+        }
+
+        std.debug.print("Enter the number of the executable to use (1-{d}): ", .{exe_paths.items.len});
+        const input = readLineFixed() catch {
+            std.debug.print("Error reading input. Please try again.\n", .{});
+            continue;
+        };
+        
+        const selection = std.fmt.parseInt(usize, input, 10) catch {
+            std.debug.print("Please enter a number between 1 and {d}\n", .{exe_paths.items.len});
+            continue;
+        };
+        
+        if (selection < 1 or selection > exe_paths.items.len) {
+            std.debug.print("Please enter a number between 1 and {d}\n", .{exe_paths.items.len});
+            continue;
+        }
+
+        return exe_paths.items[selection - 1];
+    }
+}
+
+fn createGlobalScript(allocator: std.mem.Allocator, exe_dir: []const u8, keyword: []const u8, package_name: []const u8, exe_path: []const u8) !void {
+    // On Windows, we create a .cmd file instead of a .sh file
+    const script_path = try std.fs.path.join(allocator, &[_][]const u8{
+        exe_dir, "..", "bin", 
+        try std.fmt.allocPrint(allocator, "{s}.cmd", .{keyword})
+    });
+    defer allocator.free(script_path);
+
+    // Windows batch script format
+    const script_content = try std.fmt.allocPrint(allocator,
+        \\@echo off
+        \\set "EXE_PATH=%~dp0..\lib\{s}\{s}"
+        \\"%EXE_PATH%" %*
+        \\
+    , .{ package_name, exe_path });
+    defer allocator.free(script_content);
+
+    const script_file = try std.fs.cwd().createFile(script_path, .{});
+    defer script_file.close();
+    try script_file.writeAll(script_content);
+}
+
+fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
+    // Open and verify package directory
+    var dir = std.fs.cwd().openDir(package_path, .{ .iterate = true }) catch |err| {
+        if (err == error.NotDir or err == error.FileNotFound) {
+            std.debug.print("Package directory does not exist: {s}\n", .{package_path});
+            return;
+        }
+        std.debug.print("Error opening directory: {any}\n", .{err});
+        return err;
+    };
+    defer dir.close();
+
+    const package_name = std.fs.path.basename(package_path);
+    std.debug.print("Package name: {s}\n", .{package_name});
+
+    // Find executables
+    var exe_paths = try findExecutables(allocator, dir, package_path);
+    defer {
+        for (exe_paths.items) |path| {
+            allocator.free(path);
+        }
+        exe_paths.deinit();
+    }
+
+    // Select executable
+    const selected_exe = selectExecutable(exe_paths) catch |err| {
+        switch (err) {
+            error.NoExecutablesFound => {
+                std.debug.print("No executable files found in the package\n", .{});
+                return;
+            },
+            else => return err,
+        }
+    };
+
+    // Get package metadata
     std.debug.print("Enter the keyword for the package: ", .{});
     const keyword = try readLineFixed();
     const keyword_copy = try allocator.dupe(u8, keyword);
@@ -124,15 +238,12 @@ fn install_package(allocator: std.mem.Allocator, package: []const u8, is_global:
     defer allocator.free(desc_copy);
     
     if (is_global) {
-        std.debug.print("Installing package and adding to global list: {s}\n", .{package});
-    } else {
-        std.debug.print("Installing package: {s}\n", .{package});
+        var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+        try createGlobalScript(allocator, exe_dir, keyword_copy, package_name, selected_exe);
     }
 
-    //name: package
-    //keyword: keyword_copy
-    //description: desc_copy
-    //global: is_global
+    // TODO: Save package metadata to packages.json
 }
 
 fn globalize_package(allocator: std.mem.Allocator, package: []const u8, is_add: bool) !void {
