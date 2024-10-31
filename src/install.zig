@@ -165,7 +165,20 @@ pub fn install_portman() !void {
     }
     
     if (root_dir.len == 0) {
-        const portman_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
+        const default_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
+        // confirms the user intends to install to
+        std.debug.print("No install path included. Portman will be installed to: {s}? (Y/n) ", .{default_path});
+        
+        const stdin = std.io.getStdIn().reader();
+        var buf: [2]u8 = undefined;
+        const amt = try stdin.read(&buf);
+        
+        if (amt > 0 and (buf[0] == 'n' or buf[0] == 'N')) {
+            std.debug.print("Installation cancelled\n", .{});
+            return;
+        }
+        
+        const portman_path = default_path;
         
         if (std.fs.cwd().access(portman_path, .{}) catch null != null) {
             if (force_install) {

@@ -339,20 +339,26 @@ fn selectExecutable(exe_paths: std.ArrayList([]const u8)) ![]const u8 {
 }
 
 fn createGlobalScript(allocator: std.mem.Allocator, exe_dir: []const u8, keyword: []const u8, package_name: []const u8, exe_path: []const u8) !void {
-    // On Windows, we create a .cmd file instead of a .sh file
     const script_path = try std.fs.path.join(allocator, &[_][]const u8{
         exe_dir, "..", "bin", 
         try std.fmt.allocPrint(allocator, "{s}.cmd", .{keyword})
     });
     defer allocator.free(script_path);
 
-    // Windows batch script format
-    const script_content = try std.fmt.allocPrint(allocator,
-        \\@echo off
-        \\set "EXE_PATH=%~dp0..\lib\{s}\{s}"
-        \\"%EXE_PATH%" %*
-        \\
-    , .{ package_name, exe_path });
+    // For linked packages, use the path directly from package.json
+    const script_content = if (std.mem.startsWith(u8, package_name, "link@")) 
+        try std.fmt.allocPrint(allocator,
+            \\@echo off
+            \\set "EXE_PATH={s}"
+            \\"%EXE_PATH%" %*
+            \\
+        , .{exe_path})  // Use the full path from package.json
+        else try std.fmt.allocPrint(allocator,
+            \\@echo off
+            \\set "EXE_PATH=%~dp0..\lib\{s}\{s}"
+            \\"%EXE_PATH%" %*
+            \\
+        , .{ package_name, exe_path });
     defer allocator.free(script_content);
 
     const script_file = try std.fs.cwd().createFile(script_path, .{});
@@ -396,9 +402,17 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
     };
 
     // Get package metadata
-    std.debug.print("Enter the keyword for the package: ", .{});
-    const keyword = try readLineFixed();
-    const keyword_copy = try allocator.dupe(u8, keyword);
+    var keyword_copy: []u8 = undefined;
+    while (true) {
+        std.debug.print("Enter the keyword for the package: ", .{});
+        const keyword = try readLineFixed();
+        if (keyword.len == 0) {
+            std.debug.print("Keyword cannot be empty. Please try again.\n", .{});
+            continue;
+        }
+        keyword_copy = try allocator.dupe(u8, keyword);
+        break;
+    }
     defer allocator.free(keyword_copy);
 
     std.debug.print("Enter the description for the package: ", .{});
@@ -441,7 +455,7 @@ fn globalize_package(allocator: std.mem.Allocator, keyword: []const u8, is_add: 
         const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
 
         if (is_add) {
-            // Create the batch file
+            // Create the batch file using the full path from package info
             try createGlobalScript(allocator, exe_dir, package.keyword, package.name, package.path);
             std.debug.print("Added global script for: {s}\n", .{package.keyword});
         } else {
@@ -475,6 +489,90 @@ fn remove_package(allocator: std.mem.Allocator, keyword: []const u8) !void {
         std.debug.print("Package not found: {s}\n", .{keyword});
         return error.PackageNotFound;
     }
+}
+
+fn link_package(allocator: std.mem.Allocator, path: []const u8, is_global: bool) !void {
+    std.debug.print("Linking package from: {s}\n", .{path});
+    
+    // Open and verify package directory
+    var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch |err| {
+        if (err == error.NotDir or err == error.FileNotFound) {
+            std.debug.print("Package directory does not exist: {s}\n", .{path});
+            return;
+        }
+        std.debug.print("Error opening directory: {any}\n", .{err});
+        return err;
+    };
+    defer dir.close();
+
+    // Get the base directory name and create the linked name
+    const base_name = std.fs.path.basename(path);
+    const linked_name = try std.fmt.allocPrint(allocator, "link@{s}", .{base_name});
+    defer allocator.free(linked_name);
+
+    // Find executables
+    var exe_paths = try findExecutables(allocator, dir, path);
+    defer {
+        for (exe_paths.items) |exe_path| {
+            allocator.free(exe_path);
+        }
+        exe_paths.deinit();
+    }
+
+    // Select executable
+    const selected_exe = selectExecutable(exe_paths) catch |err| {
+        switch (err) {
+            error.NoExecutablesFound => {
+                std.debug.print("No executable files found in the package\n", .{});
+                return;
+            },
+            else => return err,
+        }
+    };
+
+    // Get package metadata
+    var keyword_copy: []u8 = undefined;
+    while (true) {
+        std.debug.print("Enter the keyword for the package: ", .{});
+        const keyword = try readLineFixed();
+        if (keyword.len == 0) {
+            std.debug.print("Keyword cannot be empty. Please try again.\n", .{});
+            continue;
+        }
+        keyword_copy = try allocator.dupe(u8, keyword);
+        break;
+    }
+    defer allocator.free(keyword_copy);
+
+    std.debug.print("Enter the description for the package: ", .{});
+    const description = try readLineFixed();
+    const desc_copy = try allocator.dupe(u8, description);
+    defer allocator.free(desc_copy);
+
+    // Get absolute path for the linked package
+    const abs_path = try std.fs.realpathAlloc(allocator, path);
+    defer allocator.free(abs_path);
+
+    if (is_global) {
+        var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+        
+        // Create the global script with the full absolute path
+        const full_exe_path = try std.fs.path.join(allocator, &[_][]const u8{ abs_path, selected_exe });
+        try createGlobalScript(allocator, exe_dir, keyword_copy, linked_name, full_exe_path);
+    }
+
+    // Create and save package metadata
+    const new_package = Package{
+        .name = try allocator.dupe(u8, linked_name),
+        .path = try std.fs.path.join(allocator, &[_][]const u8{ abs_path, selected_exe }),
+        .keyword = keyword_copy,
+        .description = desc_copy,
+        .global = is_global,
+    };
+    try add_package_info(allocator, new_package);
+
+    std.debug.print("Successfully linked package: {s}\n", .{linked_name});
 }
 
 pub fn run_portman() !void {
@@ -512,7 +610,7 @@ pub fn run_portman() !void {
                 if (args.next()) |flag| {
                     if (std.mem.eql(u8, flag, "-a")) {
                         try globalize_package(allocator, package, true);
-                    }
+                    } 
                     else if (std.mem.eql(u8, flag, "-r")) {
                         try globalize_package(allocator, package, false);
                     }
@@ -531,35 +629,51 @@ pub fn run_portman() !void {
                 std.debug.print("Error: Package name is required\n", .{});
                 std.debug.print("Usage: portman remove <package-name>\n", .{});
             }
+        } else if (std.mem.eql(u8, command, "link")) {
+            var is_global: bool = false;
+            if (args.next()) |path| {
+                if (args.next()) |flag| {
+                    if (std.mem.eql(u8, flag, "-g")) {
+                        is_global = true;
+                    }
+                }
+                try link_package(allocator, path, is_global);
+            } else {
+                std.debug.print("Error: Path is required\n", .{});
+                std.debug.print("Usage: portman link <path>\n", .{});
+                return;
+            }
         } else if (std.mem.eql(u8, command, "list")) {
-    const packages = try get_packages(allocator);
-    if (args.next()) |flag| {
-        if (std.mem.eql(u8, flag, "-v")) {
-            std.debug.print("Available packages with descriptions:\n", .{});
+            const packages = try get_packages(allocator);
+            if (args.next()) |flag| {
+                if (std.mem.eql(u8, flag, "-v")) {
+                    std.debug.print("Available packages with descriptions:\n", .{});
             for (packages) |keyword| {
                 if (try parse_package_info(allocator, keyword)) |package| {
-                    std.debug.print("\n({s}\\{s}) {s} \nGlobal: {}\nDescription: {s}\n", .{
-                        package.name, 
-                        package.path,
-                        package.keyword, 
-                        package.global,
-                        package.description
-                    });
+                        std.debug.print("\n({s}\\{s}) {s} \nGlobal: {}\nDescription: {s}\n", .{
+                            package.name, 
+                            package.path,
+                            package.keyword, 
+                            package.global,
+                            package.description
+                            });
+                        }
+                    }
+                }
+            } else {
+                for (packages) |keyword| {
+                    std.debug.print("Available package: {s}\n", .{keyword});
                 }
             }
-        }
-    } else {
-        for (packages) |keyword| {
-            std.debug.print("Available package: {s}\n", .{keyword});
-        }
-    }
-} else if (try parse_package_info(allocator, command)) |package| {
+        } else if (try parse_package_info(allocator, command)) |package| {
             // Found the package, now execute it
             var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
             const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
             
             // Construct the full path to the executable
-            const exe_path = try std.fs.path.join(allocator, &[_][]const u8{
+            const exe_path = if (std.mem.startsWith(u8, package.name, "link@"))
+                try allocator.dupe(u8, package.path)  // Use the absolute path directly
+            else try std.fs.path.join(allocator, &[_][]const u8{
                 exe_dir, "..", "lib", package.name, package.path
             });
             defer allocator.free(exe_path);
