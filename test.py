@@ -72,12 +72,12 @@ def test_package_installation():
         raise
     
     print("Verifying installation...")
-    # Verify package exists in packages.json
-    # with open('portman/lib/packages.json') as f:
-    #     packages = json.load(f)
-    #     assert any(p['keyword'] == 'test-hello' for p in packages['package']), \
-    #         "Package not found in packages.json"
-    # print("Verification complete")
+    #Verify package exists in packages.json
+    with open('portman/lib/packages.json') as f:
+        packages = json.load(f)
+        assert any(p['keyword'] == 'test-hello' for p in packages['package']), \
+            "Package not found in packages.json"
+    print("Verification complete")
 
 def test_global_package():
     print("\nTesting global package operations...")
