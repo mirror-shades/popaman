@@ -66,4 +66,4 @@ Manual installation can be done by adding the portable package to the `lib` dire
 - [x] remove <package> Remove a package
 - [ ] link <path> Link a package from elsewhere
 - [x] list List all available packages
-- [ ] list -v List all available packages with descriptions
+- [x] list -v List all available packages with descriptions
