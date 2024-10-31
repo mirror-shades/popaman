@@ -34,7 +34,7 @@ portman install <package path> -g
 
 ## Global Packages:
 
-Global packages are available to all users on the system. They are accessed by adding a .sh file to the `portman/bin` directory which is in the PATH.
+Global packages are available to all users on the system. They are accessed by adding a .cmd file to the `portman/bin` directory which is in the PATH.
 If a package wasn't installed globally it can be still be added to the global list using the global command with the `-a` flag:
 
 ```
@@ -47,7 +47,7 @@ Or remove an existing package from the global list, use the global command with 
 portman global <package> -r
 ```
 
-The format for the .sh file is as follows:
+The format for the .cmd file is as follows:
 
 ```
 set EXE_PATH=%~dp0\..\lib\directory_name\path\to\executable.exe
