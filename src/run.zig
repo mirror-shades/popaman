@@ -508,11 +508,28 @@ pub fn run_portman() !void {
                 std.debug.print("Usage: portman remove <package-name>\n", .{});
             }
         } else if (std.mem.eql(u8, command, "list")) {
-            const keywords = try get_packages(allocator);
-            for (keywords) |keyword| {
-                std.debug.print("Available package: {s}\n", .{keyword});
+    const packages = try get_packages(allocator);
+    if (args.next()) |flag| {
+        if (std.mem.eql(u8, flag, "-v")) {
+            std.debug.print("Available packages with descriptions:\n", .{});
+            for (packages) |keyword| {
+                if (try parse_package_info(allocator, keyword)) |package| {
+                    std.debug.print("\n({s}\\{s}) {s} \nGlobal: {}\nDescription: {s}\n", .{
+                        package.name, 
+                        package.path,
+                        package.keyword, 
+                        package.global,
+                        package.description
+                    });
+                }
             }
-        } else if (try parse_package_info(allocator, command)) |package| {
+        }
+    } else {
+        for (packages) |keyword| {
+            std.debug.print("Available package: {s}\n", .{keyword});
+        }
+    }
+} else if (try parse_package_info(allocator, command)) |package| {
             // Found the package, now execute it
             var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
             const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
@@ -549,6 +566,7 @@ pub fn run_portman() !void {
             std.debug.print("  remove <package>      Remove a package\n", .{});
             std.debug.print("  link <path>           Link a package from elsewhere\n", .{});
             std.debug.print("  list                  List all available packages\n", .{});
+            std.debug.print("  list -v               List all available packages with descriptions\n", .{});
         }
     }
 }
