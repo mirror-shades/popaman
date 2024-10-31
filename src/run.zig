@@ -17,7 +17,7 @@ const Package = struct {
     global: bool,
 };
 
-fn readLineFixed() ![]const u8 {
+fn getline() ![]const u8 {
     var buffer: [240]u8 = undefined;
     const stdin = std.io.getStdIn();
     var buffered = std.io.bufferedReader(stdin.reader());
@@ -72,7 +72,6 @@ fn parse_package_info(allocator: std.mem.Allocator, keyword: []const u8) !?Packa
     
     return null;
 }
-
 
 fn add_package_info(allocator: std.mem.Allocator, package: Package) !void {
     // Get executable directory path
@@ -319,7 +318,7 @@ fn selectExecutable(exe_paths: std.ArrayList([]const u8)) ![]const u8 {
         }
 
         std.debug.print("Enter the number of the executable to use (1-{d}): ", .{exe_paths.items.len});
-        const input = readLineFixed() catch {
+        const input = getline() catch {
             std.debug.print("Error reading input. Please try again.\n", .{});
             continue;
         };
@@ -405,7 +404,7 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
     var keyword_copy: []u8 = undefined;
     while (true) {
         std.debug.print("Enter the keyword for the package: ", .{});
-        const keyword = try readLineFixed();
+        const keyword = try getline();
         if (keyword.len == 0) {
             std.debug.print("Keyword cannot be empty. Please try again.\n", .{});
             continue;
@@ -416,7 +415,7 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
     defer allocator.free(keyword_copy);
 
     std.debug.print("Enter the description for the package: ", .{});
-    const description = try readLineFixed();
+    const description = try getline();
     const desc_copy = try allocator.dupe(u8, description);
     defer allocator.free(desc_copy);
     
@@ -534,7 +533,7 @@ fn link_package(allocator: std.mem.Allocator, path: []const u8, is_global: bool)
     var keyword_copy: []u8 = undefined;
     while (true) {
         std.debug.print("Enter the keyword for the package: ", .{});
-        const keyword = try readLineFixed();
+        const keyword = try getline();
         if (keyword.len == 0) {
             std.debug.print("Keyword cannot be empty. Please try again.\n", .{});
             continue;
@@ -545,7 +544,7 @@ fn link_package(allocator: std.mem.Allocator, path: []const u8, is_global: bool)
     defer allocator.free(keyword_copy);
 
     std.debug.print("Enter the description for the package: ", .{});
-    const description = try readLineFixed();
+    const description = try getline();
     const desc_copy = try allocator.dupe(u8, description);
     defer allocator.free(desc_copy);
 

@@ -193,7 +193,7 @@ pub fn install_portman() !void {
 
     // Store the actual installation directory
     const installation_dir = if (root_dir.len > 0) 
-        root_dir 
+        try std.fs.path.join(allocator, &[_][]const u8{root_dir, "portman"})  // <-- Fix here
     else 
         try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
 
@@ -218,24 +218,37 @@ pub fn createInstallBat(output_path: []const u8) !void {
         \\setlocal enabledelayedexpansion
         \\
         \\REM Get the directory of the batch file
-        \\set "portman=%~dp0"
-        \\if "%portman:~-1%"=="\" set "portman=%portman:~0,-1%"
+        \\set "portman_path=%~dp0"
+        \\if "%portman_path:~-1%"=="\" set "portman_path=%portman_path:~0,-1%"
+        \\cd "%portman_path%"
+        \\cd ..
+        \\set "portman_path=%cd%"
         \\
         \\REM Set PORTMAN_HOME environment variable
-        \\setx PORTMAN_HOME "%portman%"
+        \\setx PORTMAN_HOME "%portman_path%"
         \\
         \\REM Set the paths
-        \\set "bin_path=%portman%\bin"
+        \\set "bin_path=%portman_path%\bin"
         \\
-        \\REM Add PORTMAN_HOME\bin to PATH if not already present
-        \\echo %PATH% | findstr /I /C:"%bin_path%" >nul
+        \\REM Get current PATH from registry
+        \\for /f "tokens=2*" %%a in ('reg query "HKEY_CURRENT_USER\Environment" /v PATH') do set "current_path=%%b"
+        \\
+        \\REM Check if our bin_path is already present
+        \\echo !current_path! | findstr /I /C:"%bin_path%" >nul
         \\if errorlevel 1 (
-        \\    setx PATH "%PATH%;%bin_path%"
+        \\    REM Append to existing PATH (preserving all existing entries)
+        \\    setx PATH "!current_path!;%bin_path%"
         \\    echo Added %bin_path% to PATH.
         \\) else (
         \\    echo %bin_path% is already in PATH.
         \\)
+        \\
+        \\echo.
+        \\echo Portman environment setup complete.
+        \\echo Please restart your command prompt or terminal for the changes to take effect.
+        \\
         \\endlocal
+        \\pause
         \\
     ;
 
