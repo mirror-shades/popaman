@@ -4,25 +4,29 @@
       "name": "varx_themes",
       "path": "varx_themes.exe",
       "keyword": "themes",
-      "description": "Theme manager for Varx"
+      "description": "Theme manager for Varx",
+      "global": false
     },
     {
       "name": "neovim",
       "path": "bin/nvim.exe",
       "keyword": "nvim",
-      "description": "Highly extensible text editor"
+      "description": "Highly extensible text editor",
+      "global": false
     },
     {
       "name": "fastfetch",
       "path": "fastfetch.exe",
       "keyword": "fastfetch",
-      "description": "A fast system information tool"
+      "description": "A fast system information tool",
+      "global": false
     },
     {
       "name": "alacritty",
       "path": "alacritty.exe",
       "keyword": "alacritty",
-      "description": "A fast, cross-platform, OpenGL terminal emulator"
+      "description": "A fast, cross-platform, OpenGL terminal emulator",
+      "global": false
     }
   ]
 }
