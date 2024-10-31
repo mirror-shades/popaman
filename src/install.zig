@@ -1,7 +1,13 @@
 const std = @import("std");
+const windows = std.os.windows;
 
-fn create_portman_directory(_root_dir: []const u8) !void {
-    std.debug.print("Installing Portman to {s}\n", .{_root_dir});
+fn create_portman_directory(arg_root_dir: []const u8) !void {
+    // Add null check for empty string case
+    if (arg_root_dir.len > 0) {
+        std.debug.print("Installing Portman to {s}\n", .{arg_root_dir});
+    } else {
+        std.debug.print("Installing Portman to current directory\n", .{});
+    }
     // Use an arena allocator for all our temporary allocations
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -12,9 +18,9 @@ fn create_portman_directory(_root_dir: []const u8) !void {
     const exe_path = try std.fs.selfExePath(&buffer);
     const exe_dir = std.fs.path.dirname(exe_path) orelse ".";
 
-    // Convert _root_dir to absolute path if provided
-    const base_dir = if (_root_dir.len > 0) 
-        try std.fs.cwd().realpathAlloc(allocator, _root_dir)
+    // Convert arg_root_dir to absolute path if provided
+    const base_dir = if (arg_root_dir.len > 0) 
+        try std.fs.cwd().realpathAlloc(allocator, arg_root_dir)
     else 
         exe_dir;
 
@@ -125,10 +131,16 @@ pub fn verify_install() !bool {
 pub fn install_portman() !void {
     var root_dir: []const u8 = ""; // Default install path
     var force_install = false;
+    var skip_path = false;  // New flag for -no-path
     
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
+
+    // Get executable path early
+    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_path = try std.fs.selfExePath(&buffer);
+    const exe_dir = std.fs.path.dirname(exe_path) orelse ".";
 
     var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
@@ -140,6 +152,10 @@ pub fn install_portman() !void {
             force_install = true;
             continue;
         }
+        if (std.mem.eql(u8, arg, "-no-path")) {
+            skip_path = true;
+            continue;
+        }
         // If we already have a root_dir, this is an unexpected argument
         if (root_dir.len > 0) {
             std.debug.print("Error: Unexpected argument '{s}'\n", .{arg});
@@ -149,9 +165,6 @@ pub fn install_portman() !void {
     }
     
     if (root_dir.len == 0) {
-        var buffer: [std.fs.max_path_bytes]u8 = undefined;
-        const exe_path = try std.fs.selfExePath(&buffer);
-        const exe_dir = std.fs.path.dirname(exe_path) orelse ".";
         const portman_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
         
         if (std.fs.cwd().access(portman_path, .{}) catch null != null) {
@@ -164,9 +177,56 @@ pub fn install_portman() !void {
             }
         }
     }
-    
-        
+
+    // Store the actual installation directory
+    const installation_dir = if (root_dir.len > 0) 
+        root_dir 
+    else 
+        try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
+
     std.debug.print("Installing Portman...\n", .{});
     try create_portman_directory(root_dir);
+
+    const install_bat_path = try std.fs.path.join(allocator, &[_][]const u8{installation_dir, "lib", "install.bat"});
+    try createInstallBat(install_bat_path);
+
+    // Add bin directory to PATH if not skipped
+    if (!skip_path) {
+        _ = try std.process.Child.run(.{
+            .allocator = allocator,
+            .argv = &[_][]const u8{install_bat_path},
+        });
+    }
 }
 
+pub fn createInstallBat(output_path: []const u8) !void {
+    const batch_contents =
+        \\@echo off
+        \\setlocal enabledelayedexpansion
+        \\
+        \\REM Get the directory of the batch file
+        \\set "portman=%~dp0"
+        \\if "%portman:~-1%"=="\" set "portman=%portman:~0,-1%"
+        \\
+        \\REM Set PORTMAN_HOME environment variable
+        \\setx PORTMAN_HOME "%portman%"
+        \\
+        \\REM Set the paths
+        \\set "bin_path=%portman%\bin"
+        \\
+        \\REM Add PORTMAN_HOME\bin to PATH if not already present
+        \\echo %PATH% | findstr /I /C:"%bin_path%" >nul
+        \\if errorlevel 1 (
+        \\    setx PATH "%PATH%;%bin_path%"
+        \\    echo Added %bin_path% to PATH.
+        \\) else (
+        \\    echo %bin_path% is already in PATH.
+        \\)
+        \\endlocal
+        \\
+    ;
+
+    const file = try std.fs.createFileAbsolute(output_path, .{});
+    defer file.close();
+    try file.writeAll(batch_contents);
+}
