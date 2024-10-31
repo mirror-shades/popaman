@@ -124,8 +124,83 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package) !void {
 }
 
 fn remove_package_info(allocator: std.mem.Allocator, package: Package) !void {
-    _ = allocator;
-    _ = package;
+    // Get executable directory path
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+    
+    // Construct path to packages.json
+    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "..", "lib", "packages.json"});
+    defer allocator.free(packages_path);
+    
+    // Read existing file
+    const file = try std.fs.cwd().openFile(packages_path, .{ .mode = .read_write });
+    defer file.close();
+    
+    const content = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+    defer allocator.free(content);
+
+    // Parse existing JSON
+    const parsed = try std.json.parseFromSlice(
+        PackageFile,
+        allocator,
+        content,
+        .{},
+    );
+    defer parsed.deinit();
+
+    // Create new packages array with one less slot
+    var new_packages = try allocator.alloc(Package, parsed.value.package.len - 1);
+    defer allocator.free(new_packages);
+
+    // Copy packages except the one to remove
+    var new_index: usize = 0;
+    for (parsed.value.package) |existing_package| {
+        if (!std.mem.eql(u8, existing_package.keyword, package.keyword)) {
+            new_packages[new_index] = existing_package;
+            new_index += 1;
+        }
+    }
+
+    // Create new PackageFile with updated packages
+    const new_package_file = PackageFile{ .package = new_packages };
+
+    // Convert to JSON string
+    var string = std.ArrayList(u8).init(allocator);
+    defer string.deinit();
+    try std.json.stringify(new_package_file, .{}, string.writer());
+
+    // Write back to file
+    try file.seekTo(0);
+    try file.writeAll(string.items);
+    try file.setEndPos(string.items.len);
+
+    // If package is global, remove the batch file
+    if (package.global) {
+        const batch_path = try std.fs.path.join(allocator, &[_][]const u8{
+            exe_dir, 
+            "..", 
+            "bin", 
+            try std.fmt.allocPrint(allocator, "{s}.cmd", .{package.keyword})
+        });
+        defer allocator.free(batch_path);
+        
+        std.fs.deleteFileAbsolute(batch_path) catch |err| {
+            std.debug.print("Warning: Could not delete batch file: {any}\n", .{err});
+        };
+    }
+
+    // Remove package directory from lib
+    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{
+        exe_dir,
+        "..",
+        "lib",
+        package.name,
+    });
+    defer allocator.free(lib_path);
+
+    std.fs.deleteTreeAbsolute(lib_path) catch |err| {
+        std.debug.print("Warning: Could not delete package directory: {any}\n", .{err});
+    };
 }
 
 fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
@@ -367,9 +442,15 @@ fn globalize_package(allocator: std.mem.Allocator, package: []const u8, is_add: 
     }
 }
 
-fn remove_package(allocator: std.mem.Allocator, package: []const u8) !void {
-    _ = allocator;
-    std.debug.print("Removing package: {s}\n", .{package});
+fn remove_package(allocator: std.mem.Allocator, keyword: []const u8) !void {
+    // Get the package info first
+    if (try parse_package_info(allocator, keyword)) |package| {
+        try remove_package_info(allocator, package);
+        std.debug.print("Successfully removed package: {s}\n", .{keyword});
+    } else {
+        std.debug.print("Package not found: {s}\n", .{keyword});
+        return error.PackageNotFound;
+    }
 }
 
 pub fn run_portman() !void {
@@ -422,6 +503,9 @@ pub fn run_portman() !void {
         } else if (std.mem.eql(u8, command, "remove")) {
             if (args.next()) |package| {
                 try remove_package(allocator, package);
+            } else {
+                std.debug.print("Error: Package name is required\n", .{});
+                std.debug.print("Usage: portman remove <package-name>\n", .{});
             }
         } else if (std.mem.eql(u8, command, "list")) {
             const keywords = try get_packages(allocator);
