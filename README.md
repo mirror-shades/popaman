@@ -1,4 +1,6 @@
-# Portman
+# Portman (Portable Package Manager📦)
+
+<img style="display: block; margin: 0 auto;" src="portman.png" alt="Portman Logo" width="150"/>
 
 ## Features
 
