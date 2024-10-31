@@ -86,7 +86,6 @@ Manual installation can be done by adding the portable package to the `lib` dire
 
 ## TODO
 
-- [ ] Add support for installing binaries from URLS
 - [x] Usage: portman <command> [options]
 - [x] install <package> Install a package (currently only supports installing from a downloaded binary)
 - [x] install <package> -g Install a package globally
@@ -96,3 +95,7 @@ Manual installation can be done by adding the portable package to the `lib` dire
 - [x] link <path> Link a package from elsewhere
 - [x] list List all available packages
 - [x] list -v List all available packages with descriptions
+- [x] test script completed
+
+- [ ] add support for installing binaries from URLS
+- [ ] add edge cases and negative tests to test script
