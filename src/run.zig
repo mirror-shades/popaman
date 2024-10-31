@@ -8,6 +8,13 @@ const PackageFile = struct {
     package: []Package,
 };
 
+const PackageSource = enum {
+    Exe,
+    Dir,
+    Compressed,
+    Unknown,
+};
+
 // Update Package struct to match your JSON structure
 const Package = struct {
     name: []const u8,
@@ -365,7 +372,37 @@ fn createGlobalScript(allocator: std.mem.Allocator, exe_dir: []const u8, keyword
     try script_file.writeAll(script_content);
 }
 
-fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
+fn determine_if_local_dir(package_path: []const u8) !PackageSource {
+    // Check if it's a local directory
+    var dir = std.fs.cwd().openDir(package_path, .{ .iterate = true }) catch {
+        return PackageSource.Unknown;
+    };
+    dir.close();
+    return PackageSource.Dir;
+
+}
+
+fn determine_source_type(allocator: std.mem.Allocator, package_path: []const u8) !PackageSource {
+    // check if the package is a url
+    _ = allocator;
+    if (std.mem.startsWith(u8, package_path, "http://") or 
+        std.mem.startsWith(u8, package_path, "https://")) {
+        std.debug.print("Package is a url\n", .{});
+        return PackageSource.Compressed;
+    }
+    else if (std.mem.endsWith(u8, package_path, ".zip") or 
+             std.mem.endsWith(u8, package_path, ".tar") or 
+             std.mem.endsWith(u8, package_path, ".gz") or 
+             std.mem.endsWith(u8, package_path, ".7z") or 
+             std.mem.endsWith(u8, package_path, ".rar")) {
+        return PackageSource.Compressed;
+    }
+    else {
+        return PackageSource.Unknown;
+    }
+}
+
+fn install_local_dir(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
     // Open and verify package directory
     var dir = std.fs.cwd().openDir(package_path, .{ .iterate = true }) catch |err| {
         if (err == error.NotDir or err == error.FileNotFound) {
@@ -444,6 +481,19 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
         .global = is_global,
     };
     try add_package_info(allocator, new_package);
+}
+
+fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
+    //make an enum for exe, dir, and compressed
+    
+    var package_source: PackageSource = try determine_if_local_dir(package_path); // Added try
+    std.debug.print("Package source: {}\n", .{package_source});
+    if(package_source == PackageSource.Unknown) {
+        package_source = try determine_source_type(allocator, package_path);
+        std.debug.print("Package source: {}\n", .{package_source});
+        return;
+    }
+    try install_local_dir(allocator, package_path, is_global);
 }
 
 fn globalize_package(allocator: std.mem.Allocator, keyword: []const u8, is_add: bool) !void {
