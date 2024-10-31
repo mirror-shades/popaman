@@ -427,17 +427,43 @@ pub fn run_portman() !void {
             for (keywords) |keyword| {
                 std.debug.print("Available package: {s}\n", .{keyword});
             }
+        } else if (try parse_package_info(allocator, command)) |package| {
+            // Found the package, now execute it
+            var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+            const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+            
+            // Construct the full path to the executable
+            const exe_path = try std.fs.path.join(allocator, &[_][]const u8{
+                exe_dir, "..", "lib", package.name, package.path
+            });
+            defer allocator.free(exe_path);
+
+            // Collect remaining arguments
+            var child_args = std.ArrayList([]const u8).init(allocator);
+            defer child_args.deinit();
+            
+            // Add the executable path as the first argument
+            try child_args.append(exe_path);
+            
+            // Add any remaining arguments
+            while (args.next()) |arg| {
+                try child_args.append(arg);
+            }
+
+            // Create child process
+            var child = std.process.Child.init(child_args.items, allocator);
+            _ = try child.spawnAndWait();
+        } else {
+            // No arguments provided, show help
+            std.debug.print("Usage: portman <command> [options]\n", .{});
+            std.debug.print("Commands:\n", .{});
+            std.debug.print("  install <package>     Install a package\n", .{});
+            std.debug.print("  install <package> -g  Install a package globally\n", .{});
+            std.debug.print("  global <package> -a   Add package to global list\n", .{});
+            std.debug.print("  global <package> -r   Remove package from global list\n", .{});
+            std.debug.print("  remove <package>      Remove a package\n", .{});
+            std.debug.print("  link <path>           Link a package from elsewhere\n", .{});
+            std.debug.print("  list                  List all available packages\n", .{});
         }
-    } else {
-        // No arguments provided, show help
-        std.debug.print("Usage: portman <command> [options]\n", .{});
-        std.debug.print("Commands:\n", .{});
-        std.debug.print("  install <package>     Install a package\n", .{});
-        std.debug.print("  install <package> -g  Install a package globally\n", .{});
-        std.debug.print("  global <package> -a   Add package to global list\n", .{});
-        std.debug.print("  global <package> -r   Remove package from global list\n", .{});
-        std.debug.print("  remove <package>      Remove a package\n", .{});
-        std.debug.print("  link <path>           Link a package from elsewhere\n", .{});
-        std.debug.print("  list                  List all available packages\n", .{});
     }
 }
