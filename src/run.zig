@@ -418,20 +418,20 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
     const description = try getline();
     const desc_copy = try allocator.dupe(u8, description);
     defer allocator.free(desc_copy);
+
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+    
+    // Create the destination path in the lib directory
+    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "lib", package_name });
+    defer allocator.free(lib_path);
+
+    // Copy all package files to the lib directory
+    std.debug.print("Copying package files to {s}...\n", .{lib_path});
+    try copyPackageFiles(allocator, package_path, lib_path);
     
     if (is_global) {
-        var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
-        const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
-        
-        // Create the destination path in the lib directory
-        const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "lib", package_name });
-        defer allocator.free(lib_path);
-
-        // Copy all package files to the lib directory
-        std.debug.print("Copying package files to {s}...\n", .{lib_path});
-        try copyPackageFiles(allocator, package_path, lib_path);
-        
-        // Create the command script
+        // Create the command script only if global
         try createGlobalScript(allocator, exe_dir, keyword_copy, package_name, selected_exe);
     }
 
@@ -441,7 +441,7 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
         .path = try allocator.dupe(u8, selected_exe),
         .keyword = keyword_copy,
         .description = desc_copy,
-        .global = is_global,  // Add this field
+        .global = is_global,
     };
     try add_package_info(allocator, new_package);
 }

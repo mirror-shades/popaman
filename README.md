@@ -2,15 +2,29 @@
 
 <img style="display: block; margin: 0 auto;" src="portman.png" alt="Portman Logo" width="150"/>
 
-## Features
+Portman is a lightweight package manager for managing portable Windows applications. It allows you to install, manage, and run portable apps from a centralized location with optional global access. It focuses on simplicity and ease of use allowing you to install and run portable applications with a few simple commands.
 
-Portman is a lightweight package manager for managing portable Windows applications. It allows you to install, manage, and run portable apps from a centralized location with optional global access.
+## Features
 
 - Install and manage portable applications
 - Global or local package installation
 - Simple command-line interface
 - JSON-based package management
 - Automatic PATH management
+
+## Technical Highlights
+
+- Written in Zig for maximum portability and performance
+- Memory-safe implementation using Arena allocators
+- Robust error handling and user feedback
+- Extensible JSON-based package configuration
+
+## Design Philosophy
+
+- Self-contained and portable by design
+- Minimal dependencies for reliability
+- Flexible installation options (global/local)
+- Simple but powerful command-line interface
 
 ## Building and Installing Portman
 
