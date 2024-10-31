@@ -110,6 +110,42 @@ fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
     return keywords;
 }
 
+fn copyPackageFiles(allocator: std.mem.Allocator, source_path: []const u8, dest_dir: []const u8) !void {
+    // Create the destination directory if it doesn't exist
+    try std.fs.cwd().makePath(dest_dir);
+
+    var source_dir = try std.fs.cwd().openDir(source_path, .{ .iterate = true });
+    defer source_dir.close();
+
+    var walker = try source_dir.walk(allocator);
+    defer walker.deinit();
+
+    while (try walker.next()) |entry| {
+        const source_file_path = try std.fs.path.join(allocator, &[_][]const u8{ source_path, entry.path });
+        defer allocator.free(source_file_path);
+        
+        const dest_file_path = try std.fs.path.join(allocator, &[_][]const u8{ dest_dir, entry.path });
+        defer allocator.free(dest_file_path);
+
+        switch (entry.kind) {
+            .file => {
+                // Create parent directory if needed
+                const dest_parent = std.fs.path.dirname(dest_file_path);
+                if (dest_parent) |parent| {
+                    try std.fs.cwd().makePath(parent);
+                }
+
+                // Copy the file
+                try std.fs.copyFileAbsolute(source_file_path, dest_file_path, .{});
+            },
+            .directory => {
+                try std.fs.cwd().makePath(dest_file_path);
+            },
+            else => {},
+        }
+    }
+}
+
 fn findExecutables(allocator: std.mem.Allocator, dir: std.fs.Dir, package_path: []const u8) !std.ArrayList([]const u8) {
     var exe_paths = std.ArrayList([]const u8).init(allocator);
     errdefer {
@@ -203,7 +239,7 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
     };
     defer dir.close();
 
-    const package_name = std.fs.path.basename(package_path);
+const package_name = std.fs.path.basename(package_path);
     std.debug.print("Package name: {s}\n", .{package_name});
 
     // Find executables
@@ -240,6 +276,16 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
     if (is_global) {
         var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
         const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+        
+        // Create the destination path in the lib directory
+        const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "lib", package_name });
+        defer allocator.free(lib_path);
+
+        // Copy all package files to the lib directory
+        std.debug.print("Copying package files to {s}...\n", .{lib_path});
+        try copyPackageFiles(allocator, package_path, lib_path);
+        
+        // Create the command script
         try createGlobalScript(allocator, exe_dir, keyword_copy, package_name, selected_exe);
     }
 
