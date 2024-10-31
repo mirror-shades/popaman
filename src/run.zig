@@ -575,7 +575,6 @@ fn link_package(allocator: std.mem.Allocator, path: []const u8, is_global: bool)
 }
 
 pub fn run_portman() !void {
-    std.debug.print("Running Portman...\n", .{});
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
