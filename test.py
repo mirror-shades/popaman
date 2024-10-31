@@ -59,10 +59,11 @@ def test_package_installation():
     print("\nTesting package installation...")
     print("Running installation command...")
     try:
-        # Add newline after the '1' and include the next input
-        inputs = b'1\nfastfetch\nthis is optional\n'
+        # Use absolute path for test_package
+        test_pkg_path = str(Path('test_package').absolute())
+        inputs = b'1\ntest-hello\nthis is optional\n'
         process = run_command(
-            '.\\portman\\bin\\portman.exe install C:/Users/User/Downloads/fastfetch',
+            '.\\portman\\bin\\portman.exe install ' + test_pkg_path,
             input_text=inputs
         )
         print("Installation command completed")
