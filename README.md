@@ -55,3 +55,15 @@ The `packages.json` file defines how Portman locates and manages packages. Here 
 ```
 
 Manual installation can be done by adding the portable package to the `lib` directory and adding the `packages.json` entry for it.
+
+# TODO
+
+- [x] Usage: portman <command> [options]
+- [x] install <package> Install a package (currently only supports installing from a downloaded binary)
+- [x] install <package> -g Install a package globally
+- [ ] global <package> -a Add package to global list
+- [ ] global <package> -r Remove package from global list
+- [x] remove <package> Remove a package
+- [ ] link <path> Link a package from elsewhere
+- [x] list List all available packages
+- [ ] list -v List all available packages with descriptions
