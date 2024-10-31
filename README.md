@@ -1,5 +1,7 @@
 # Portman
 
+## Features
+
 Portman is a lightweight package manager for managing portable Windows applications. It allows you to install, manage, and run portable apps from a centralized location with optional global access.
 
 - Install and manage portable applications
@@ -8,7 +10,7 @@ Portman is a lightweight package manager for managing portable Windows applicati
 - JSON-based package management
 - Automatic PATH management
 
-# Building and Installing Portman
+## Building and Installing Portman
 
 To build from source you will need Python for the build and Zig 0.14 for compilation. Just run the build.py script to compile the installer.
 
@@ -28,7 +30,7 @@ To install a package to the global list, use the install command with the `-g` f
 portman install <package path> -g
 ```
 
-# Global Packages:
+## Global Packages:
 
 Global packages are available to all users on the system. They are accessed by adding a .sh file to the `portman/bin` directory which is in the PATH.
 If a package wasn't installed globally it can be still be added to the global list using the global command with the `-a` flag:
@@ -50,7 +52,7 @@ set EXE_PATH=%~dp0\..\lib\directory_name\path\to\executable.exe
 "%EXE_PATH%" %*
 ```
 
-# Package Format:
+## Package Format:
 
 The `packages.json` file defines how Portman locates and manages packages. Here is an example assuming the package binary is located at `portman/lib/directory_name/path/to/executable.exe`:
 
@@ -66,7 +68,7 @@ The `packages.json` file defines how Portman locates and manages packages. Here 
 
 Manual installation can be done by adding the portable package to the `lib` directory and adding the `packages.json` entry for it.
 
-# TODO
+## TODO
 
 - [x] Usage: portman <command> [options]
 - [x] install <package> Install a package (currently only supports installing from a downloaded binary)
