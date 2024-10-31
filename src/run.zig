@@ -437,6 +437,7 @@ pub fn run_portman() !void {
         std.debug.print("  global <package> -a   Add package to global list\n", .{});
         std.debug.print("  global <package> -r   Remove package from global list\n", .{});
         std.debug.print("  remove <package>      Remove a package\n", .{});
+        std.debug.print("  link <path>           Link a package from elsewhere\n", .{});
         std.debug.print("  list                  List all available packages\n", .{});
     }
 }
