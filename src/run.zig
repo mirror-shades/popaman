@@ -564,9 +564,43 @@ fn install_exe(allocator: std.mem.Allocator, package_path: []const u8, is_global
 }
 
 fn install_compressed(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
-    _ = allocator;
-    _ = package_path;
-    _ = is_global;
+    // Get executable directory path
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+    
+    // Create a temporary extraction directory
+    const temp_dir = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "temp", "extract" });
+    defer allocator.free(temp_dir);
+    
+    try std.fs.cwd().makePath(temp_dir);
+    defer std.fs.deleteTreeAbsolute(temp_dir) catch |err| {
+        std.debug.print("Warning: Could not delete temporary directory: {any}\n", .{err});
+    };
+
+    // Create the output argument
+    const output_arg = try std.fmt.allocPrint(allocator, "-o{s}", .{temp_dir});
+    defer allocator.free(output_arg);
+
+    // Prepare 7zip command
+    const args = [_][]const u8{
+        "7zr",
+        "x",
+        package_path,
+        output_arg,
+        "-y"  // Auto-answer yes to queries
+    };
+
+    // Execute 7zip
+    var child = std.process.Child.init(&args, allocator);
+    const term = try child.spawnAndWait();
+    
+    if (term != .Exited or term.Exited != 0) {
+        std.debug.print("Failed to extract package: {s}\n", .{package_path});
+        return error.ExtractionFailed;
+    }
+
+    // Now that we've extracted the files, install from the temp directory
+    try install_local_dir(allocator, temp_dir, is_global);
 }
 
 fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
