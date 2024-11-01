@@ -489,8 +489,53 @@ fn install_local_dir(allocator: std.mem.Allocator, package_path: []const u8, is_
 }
 
 fn download_package(allocator: std.mem.Allocator, package_path: []const u8) !void {
-    _ = allocator;
-    _ = package_path;
+    // Create a temporary directory for downloads if it doesn't exist
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+    
+    const temp_dir = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "temp" });
+    defer allocator.free(temp_dir);
+    
+    try std.fs.cwd().makePath(temp_dir);
+
+    // Extract filename from URL
+    const url_basename = std.fs.path.basename(package_path);
+    const output_path = try std.fs.path.join(allocator, &[_][]const u8{ temp_dir, url_basename });
+    defer allocator.free(output_path);
+
+    // Prepare curl command
+    const args = [_][]const u8{
+        "curl",
+        "-L", // Follow redirects
+        "-o",
+        output_path,
+        package_path,
+    };
+
+    // Execute curl
+    var child = std.process.Child.init(&args, allocator);
+    const term = try child.spawnAndWait();
+    
+    if (term != .Exited or term.Exited != 0) {
+        std.debug.print("Failed to download package: {s}\n", .{package_path});
+        return error.DownloadFailed;
+    }
+
+    // Now that we have the file, determine its type and install it
+    const source_type = try determine_source_type(output_path);
+    switch (source_type) {
+        .Exe => try install_exe(allocator, output_path, false),
+        .Compressed => try install_compressed(allocator, output_path, false),
+        else => {
+            std.debug.print("Downloaded file is not a recognized package type\n", .{});
+            return error.InvalidPackageType;
+        },
+    }
+
+    // Clean up the temporary file
+    std.fs.deleteFileAbsolute(output_path) catch |err| {
+        std.debug.print("Warning: Could not delete temporary file: {any}\n", .{err});
+    };
 }
 
 fn install_exe(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {

@@ -35,13 +35,16 @@ def run_command(cmd, input_text=None):
     if isinstance(cmd, str):
         cmd = cmd.split()
     
+    # Check if this is a URL download command
+    is_url_download = any(arg.startswith(('http://', 'https://')) for arg in cmd)
+    
     process = subprocess.Popen(
         cmd,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=False,
-        bufsize=0  # Add unbuffered mode
+        bufsize=0
     )
     
     # If we have multiple inputs, send them one at a time with small delays
@@ -49,6 +52,8 @@ def run_command(cmd, input_text=None):
         inputs = input_text.split(b'\n')
         for inp in inputs:
             if inp:  # Only send non-empty inputs
+                if is_url_download:
+                    time.sleep(0.5)
                 process.stdin.write(inp + b'\n')
                 process.stdin.flush()
                 time.sleep(0.1)  # Give the program time to process each input
@@ -113,7 +118,7 @@ def test_package_running():
         print(f"Package execution failed: {e}")
         raise
 
-def test_package_installation():
+def test_package_installation_from_dir():
     print("\nTesting package installation...")
     print("Running installation command...")
     try:
@@ -164,14 +169,15 @@ def test_package_linking():
 def test_package_removal():
     print("\nTesting package removal...")
     # Remove package
-    process = run_command('portman\\bin\\portman.exe remove test-hello')  # use Windows path
-    process = run_command('portman\\bin\\portman.exe remove test-hello-link')  # use Windows path
-    process = run_command('portman\\bin\\portman.exe remove test-hello-exe')  # use Windows path
+    process = run_command('portman\\bin\\portman.exe remove test-hello')  
+    process = run_command('portman\\bin\\portman.exe remove test-hello-link')  
+    process = run_command('portman\\bin\\portman.exe remove test-hello-exe')  
+    process = run_command('portman\\bin\\portman.exe remove test-hello-url-exe') 
     
     # Verify package is removed from packages.json
     with open('portman/lib/packages.json') as f:
         packages = json.load(f)
-        assert not any(p['keyword'] == 'test-hello' or p['keyword'] == 'test_package-link' or p['keyword'] == 'test_package-exe' for p in packages['package']), \
+        assert not any(p['keyword'] == 'test-hello' or p['keyword'] == 'test_package-link' or p['keyword'] == 'test_package-exe' or p['keyword'] == 'test_package-url-exe' for p in packages['package']), \
             "Package still exists in packages.json"
 
 def test_package_installation_from_exe():
@@ -198,12 +204,37 @@ def test_package_installation_from_exe():
             "Package not found in packages.json"
     print("Verification complete")
 
+def test_package_installation_from_url_exe():
+    print("\nTesting package installation...")
+    print("Running installation command...")
+    try:
+        # Use absolute path for test_package
+        test_pkg_path = "https://raw.githubusercontent.com/mirror-shades/portman/master/test_package/hello.exe"
+        inputs = b'1\ntest-hello-url-exe\nthis is optional\n'
+        process = run_command(
+            '.\\portman\\bin\\portman.exe install ' + test_pkg_path,
+            input_text=inputs
+        )
+        print("Installation command completed")
+    except Exception as e:
+        print(f"Installation failed: {e}")
+        raise
+    
+    print("Verifying installation...")
+    #Verify package exists in packages.json
+    with open('portman/lib/packages.json') as f:
+        packages = json.load(f)
+        assert any(p['keyword'] == 'test-hello-url-exe' for p in packages['package']), \
+            "Package not found in packages.json"
+    print("Verification complete")
+
 def main():
     test_pkg = setup()
     try:
-       test_package_installation()
        test_package_linking()
+       test_package_installation_from_dir()
        test_package_installation_from_exe()
+       test_package_installation_from_url_exe()
        test_package_running()
        test_package_removal()
        print("\nAll tests passed! ✅")
