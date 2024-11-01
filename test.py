@@ -94,13 +94,19 @@ def test_package_running():
         print("==================")
         
         assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
-            "Package 'test-hello' did not output 'hello'"
+            "Package 'test-hello' did not output 'Hello, World!'"
         
         # Test the linked package
-        process = run_command('.\\portman\\bin\\portman.exe link-test-hello')
+        process = run_command('.\\portman\\bin\\portman.exe test-hello-link')
         stdout, stderr = process.communicate()
         assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
-            "Package 'link-test-hello' did not output 'hello'"
+            "Package 'test-hello-link' did not output 'Hello, World!'"
+        
+        # Test the exe package
+        process = run_command('.\\portman\\bin\\portman.exe test-hello-exe')
+        stdout, stderr = process.communicate()
+        assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
+            "Package 'test-hello-exe' did not output 'Hello, World!'"
         
         print("Package execution tests passed")
     except Exception as e:
@@ -137,7 +143,7 @@ def test_package_linking():
     try:
         # Use absolute path for test_package
         test_pkg_path = str(Path('test_package').absolute())
-        inputs = b'1\nlink-test-hello\nthis is optional\n'
+        inputs = b'1\ntest-hello-link\nthis is optional\n'
         process = run_command(
             '.\\portman\\bin\\portman.exe link ' + test_pkg_path,
             input_text=inputs
@@ -159,7 +165,8 @@ def test_package_removal():
     print("\nTesting package removal...")
     # Remove package
     process = run_command('portman\\bin\\portman.exe remove test-hello')  # use Windows path
-    process = run_command('portman\\bin\\portman.exe remove link-test-hello')  # use Windows path
+    process = run_command('portman\\bin\\portman.exe remove test-hello-link')  # use Windows path
+    process = run_command('portman\\bin\\portman.exe remove test-hello-exe')  # use Windows path
     
     # Verify package is removed from packages.json
     with open('portman/lib/packages.json') as f:
@@ -167,11 +174,36 @@ def test_package_removal():
         assert not any(p['keyword'] == 'test-hello' or p['name'] == 'link@test_package' for p in packages['package']), \
             "Package still exists in packages.json"
 
+def test_package_installation_from_exe():
+    print("\nTesting package installation...")
+    print("Running installation command...")
+    try:
+        # Use absolute path for test_package
+        test_pkg_path = str(Path('test_package/hello.exe').absolute())
+        inputs = b'1\ntest-hello-exe\nthis is optional\n'
+        process = run_command(
+            '.\\portman\\bin\\portman.exe install ' + test_pkg_path,
+            input_text=inputs
+        )
+        print("Installation command completed")
+    except Exception as e:
+        print(f"Installation failed: {e}")
+        raise
+    
+    print("Verifying installation...")
+    #Verify package exists in packages.json
+    with open('portman/lib/packages.json') as f:
+        packages = json.load(f)
+        assert any(p['keyword'] == 'test-hello' for p in packages['package']), \
+            "Package not found in packages.json"
+    print("Verification complete")
+
 def main():
     test_pkg = setup()
     try:
        test_package_installation()
        test_package_linking()
+       test_package_installation_from_exe()
        test_package_running()
        test_package_removal()
        print("\nAll tests passed! ✅")
