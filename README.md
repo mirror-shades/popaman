@@ -97,7 +97,7 @@ Manual installation can be done by adding the portable package to the `lib` dire
 - [x] list -v List all available packages with descriptions
 - [x] test script completed
 - [x] add support for installing binaries from URLS
+- [x] add 7zip dependency on install
 
-- [ ] add 7zip dependency on install
 - [ ] add support for installing from compressed files
 - [ ] add edge cases and negative tests to test script
