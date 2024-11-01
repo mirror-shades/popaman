@@ -12,6 +12,7 @@ const PackageSource = enum {
     Exe,
     Dir,
     Compressed,
+    URL,
     Unknown,
 };
 
@@ -382,13 +383,11 @@ fn determine_if_local_dir(package_path: []const u8) !PackageSource {
 
 }
 
-fn determine_source_type(allocator: std.mem.Allocator, package_path: []const u8) !PackageSource {
-    // check if the package is a url
-    _ = allocator;
+fn determine_source_type(package_path: []const u8) !PackageSource {
     if (std.mem.startsWith(u8, package_path, "http://") or 
         std.mem.startsWith(u8, package_path, "https://")) {
         std.debug.print("Package is a url\n", .{});
-        return PackageSource.Compressed;
+        return PackageSource.URL;
     }
     else if (std.mem.endsWith(u8, package_path, ".zip") or 
              std.mem.endsWith(u8, package_path, ".tar") or 
@@ -396,6 +395,12 @@ fn determine_source_type(allocator: std.mem.Allocator, package_path: []const u8)
              std.mem.endsWith(u8, package_path, ".7z") or 
              std.mem.endsWith(u8, package_path, ".rar")) {
         return PackageSource.Compressed;
+    }
+    else if (std.mem.endsWith(u8, package_path, ".exe") or
+             std.mem.endsWith(u8, package_path, ".sh") or
+             std.mem.endsWith(u8, package_path, ".cmd") or
+             std.mem.endsWith(u8, package_path, ".bat")) {
+        return PackageSource.Exe;
     }
     else {
         return PackageSource.Unknown;
@@ -483,14 +488,58 @@ fn install_local_dir(allocator: std.mem.Allocator, package_path: []const u8, is_
     try add_package_info(allocator, new_package);
 }
 
+fn download_package(allocator: std.mem.Allocator, package_path: []const u8) !void {
+    _ = allocator;
+    _ = package_path;
+}
+
+fn install_exe(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
+    // Get executable directory path
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+
+    // Get the exe name without extension
+    const exe_name = std.fs.path.stem(package_path);
+    
+    // Create the destination path in the lib directory
+    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "lib", exe_name });
+    defer allocator.free(lib_path);
+
+    // Create the lib directory if it doesn't exist
+    try std.fs.cwd().makePath(lib_path);
+
+    // Copy the exe to the new directory
+    const dest_path = try std.fs.path.join(allocator, &[_][]const u8{ lib_path, std.fs.path.basename(package_path) });
+    defer allocator.free(dest_path);
+
+    try std.fs.copyFileAbsolute(package_path, dest_path, .{});
+
+    // Now that we've set up the directory structure, install it as a local dir
+    try install_local_dir(allocator, lib_path, is_global);
+}
+
+fn install_compressed(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
+    _ = allocator;
+    _ = package_path;
+    _ = is_global;
+}
+
 fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
     //make an enum for exe, dir, and compressed
-    
     var package_source: PackageSource = try determine_if_local_dir(package_path); // Added try
     std.debug.print("Package source: {}\n", .{package_source});
     if(package_source == PackageSource.Unknown) {
-        package_source = try determine_source_type(allocator, package_path);
+        package_source = try determine_source_type(package_path);
         std.debug.print("Package source: {}\n", .{package_source});
+        if (package_source == PackageSource.URL ) {
+            try download_package(allocator, package_path);
+        }
+        else if (package_source == PackageSource.Exe) {
+            try install_exe(allocator, package_path, is_global);
+        }
+        else if (package_source == PackageSource.Compressed) {
+            try install_compressed(allocator, package_path, is_global);
+        }
         return;
     }
     try install_local_dir(allocator, package_path, is_global);
