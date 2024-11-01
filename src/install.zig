@@ -212,6 +212,54 @@ pub fn install_portman() !void {
     }
 }
 
+fn install_7zip() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // Get the path to portman executable
+    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_path = try std.fs.selfExePath(&buffer);
+    const exe_dir = std.fs.path.dirname(exe_path) orelse return error.InvalidPath;
+
+    std.debug.print("Installing 7-Zip...\n", .{});
+
+    // Use exe_dir instead of constructing a wrong path
+    const portman_exe = try std.fs.path.join(allocator, &[_][]const u8{
+        exe_dir,
+        "portman",
+        "bin",
+        "portman.exe"
+    });
+
+    std.debug.print("Using portman executable at: {s}\n", .{portman_exe});
+
+    // Verify the executable exists
+    _ = std.fs.cwd().openFile(portman_exe, .{}) catch |err| {
+        std.debug.print("Error: Could not find portman executable: {any}\n", .{err});
+        return err;
+    };
+
+    const result = std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = &[_][]const u8{
+            portman_exe,
+            "install",
+            "https://7-zip.org/a/7zr.exe",
+        },
+    }) catch |err| {
+        std.debug.print("Failed to install 7-Zip: {any}\n", .{err});
+        return err;
+    };
+
+    if (result.term.Exited != 0) {
+        std.debug.print("7-Zip installation failed with exit code: {d}\n", .{result.term.Exited});
+        return error.InstallationFailed;
+    }
+
+    std.debug.print("7-Zip installed successfully\n", .{});
+}
+
 pub fn createInstallBat(output_path: []const u8) !void {
     const batch_contents =
         \\@echo off
