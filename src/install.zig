@@ -1,6 +1,19 @@
 const std = @import("std");
 const windows = std.os.windows;
 
+// Update Package struct to match your JSON structure
+const Package = struct {
+    name: []const u8,
+    path: []const u8,
+    keyword: []const u8,
+    description: []const u8,
+    global: bool,
+};
+
+const PackageFile = struct {
+    package: []Package,
+};
+
 fn create_portman_directory(arg_root_dir: []const u8) !void {
     // Add null check for empty string case
     if (arg_root_dir.len > 0) {
@@ -126,54 +139,6 @@ pub fn verify_install() !bool {
     defer file.close();
     
     return true;
-}
-
-fn install_7zip() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    // Get the path to portman executable
-    var buffer: [std.fs.max_path_bytes]u8 = undefined;
-    const exe_path = try std.fs.selfExePath(&buffer);
-    const exe_dir = std.fs.path.dirname(exe_path) orelse return error.InvalidPath;
-
-    std.debug.print("Installing 7-Zip...\n", .{});
-
-    // Use exe_dir instead of constructing a wrong path
-    const portman_exe = try std.fs.path.join(allocator, &[_][]const u8{
-        exe_dir,
-        "portman",
-        "bin",
-        "portman.exe"
-    });
-
-    std.debug.print("Using portman executable at: {s}\n", .{portman_exe});
-
-    // Verify the executable exists
-    _ = std.fs.cwd().openFile(portman_exe, .{}) catch |err| {
-        std.debug.print("Error: Could not find portman executable: {any}\n", .{err});
-        return err;
-    };
-
-    const result = std.process.Child.run(.{
-        .allocator = allocator,
-        .argv = &[_][]const u8{
-            portman_exe,
-            "install",
-            "https://7-zip.org/a/7zr.exe",
-        },
-    }) catch |err| {
-        std.debug.print("Failed to install 7-Zip: {any}\n", .{err});
-        return err;
-    };
-
-    if (result.term.Exited != 0) {
-        std.debug.print("7-Zip installation failed with exit code: {d}\n", .{result.term.Exited});
-        return error.InstallationFailed;
-    }
-
-    std.debug.print("7-Zip installed successfully\n", .{});
 }
 
 pub fn createInstallBat(output_path: []const u8) !void {
@@ -304,6 +269,140 @@ pub fn install_portman() !void {
         });
     }
 
-    // try install_7zip();
+    try install_7zip(allocator);
     std.debug.print("Portman installed successfully!\n", .{});
+}
+
+fn copyPackageFiles(allocator: std.mem.Allocator, source_path: []const u8, dest_dir: []const u8) !void {
+    // Create the destination directory if it doesn't exist
+    try std.fs.cwd().makePath(dest_dir);
+
+    var source_dir = try std.fs.cwd().openDir(source_path, .{ .iterate = true });
+    defer source_dir.close();
+
+    var walker = try source_dir.walk(allocator);
+    defer walker.deinit();
+
+    while (try walker.next()) |entry| {
+        const source_file_path = try std.fs.path.join(allocator, &[_][]const u8{ source_path, entry.path });
+        defer allocator.free(source_file_path);
+        
+        const dest_file_path = try std.fs.path.join(allocator, &[_][]const u8{ dest_dir, entry.path });
+        defer allocator.free(dest_file_path);
+
+        switch (entry.kind) {
+            .file => {
+                // Create parent directory if needed
+                const dest_parent = std.fs.path.dirname(dest_file_path);
+                if (dest_parent) |parent| {
+                    try std.fs.cwd().makePath(parent);
+                }
+
+                // Copy the file
+                try std.fs.copyFileAbsolute(source_file_path, dest_file_path, .{});
+            },
+            .directory => {
+                try std.fs.cwd().makePath(dest_file_path);
+            },
+            else => {},
+        }
+    }
+}
+
+fn install_7zip(allocator: std.mem.Allocator) !void {
+    std.debug.print("Installing 7-Zip...\n", .{});
+    
+    // Get executable directory path
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+    
+    // Create the destination path in the lib directory
+    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "portman", "lib", "7zr" });
+    defer allocator.free(lib_path);
+
+    // Create the lib directory if it doesn't exist
+    try std.fs.cwd().makePath(lib_path);
+
+    // Set up the destination file path
+    const dest_path = try std.fs.path.join(allocator, &[_][]const u8{ lib_path, "7zr.exe" });
+    defer allocator.free(dest_path);
+
+    // Prepare curl command
+    const args = [_][]const u8{
+        "curl",
+        "-L", // Follow redirects
+        "-o",
+        dest_path,
+        "https://www.7-zip.org/a/7zr.exe",
+    };
+
+    // Execute curl
+    var child = std.process.Child.init(&args, allocator);
+    const term = try child.spawnAndWait();
+    
+    if (term != .Exited or term.Exited != 0) {
+        std.debug.print("Failed to download 7-Zip\n", .{});
+        return error.DownloadFailed;
+    }
+
+    std.debug.print("7-Zip downloaded successfully to {s}\n", .{dest_path});
+
+    // Create and save package metadata
+    const new_package = Package{
+        .name = "7zr",
+        .path = "7zr.exe",
+        .keyword = "7zr",
+        .description = "7-Zip is a file archiver with a high compression ratio.",
+        .global = false,
+    };
+    try add_package_info(allocator, new_package);
+}
+
+fn add_package_info(allocator: std.mem.Allocator, package: Package) !void {
+    // Get executable directory path
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+    
+    // Construct path to packages.json
+    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman", "lib", "packages.json"});
+    defer allocator.free(packages_path);
+    
+    // Read existing file
+    const file = try std.fs.cwd().openFile(packages_path, .{ .mode = .read_write });
+    defer file.close();
+    
+    const content = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+    defer allocator.free(content);
+
+    // Parse existing JSON
+    const parsed = try std.json.parseFromSlice(
+        PackageFile,
+        allocator,
+        content,
+        .{},
+    );
+    defer parsed.deinit();
+
+    // Create new packages array with one more slot
+    var new_packages = try allocator.alloc(Package, parsed.value.package.len + 1);
+    defer allocator.free(new_packages);
+
+    // Copy existing packages
+    @memcpy(new_packages[0..parsed.value.package.len], parsed.value.package);
+
+    // Add new package
+    new_packages[new_packages.len - 1] = package;
+
+    // Create new PackageFile with updated packages
+    const new_package_file = PackageFile{ .package = new_packages };
+
+    // Convert to JSON string
+    var string = std.ArrayList(u8).init(allocator);
+    defer string.deinit();
+    try std.json.stringify(new_package_file, .{}, string.writer());
+
+    // Write back to file
+    try file.seekTo(0);
+    try file.writeAll(string.items);
+    try file.setEndPos(string.items.len);
 }
