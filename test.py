@@ -171,7 +171,7 @@ def test_package_removal():
     # Verify package is removed from packages.json
     with open('portman/lib/packages.json') as f:
         packages = json.load(f)
-        assert not any(p['keyword'] == 'test-hello' or p['name'] == 'link@test_package' for p in packages['package']), \
+        assert not any(p['keyword'] == 'test-hello' or p['keyword'] == 'test_package-link' or p['keyword'] == 'test_package-exe' for p in packages['package']), \
             "Package still exists in packages.json"
 
 def test_package_installation_from_exe():
