@@ -1,8 +1,26 @@
 import subprocess
 import json
-import shutil
 from pathlib import Path
 import time
+import os
+
+def find_portman_dir():
+    """Find the portman installation directory by walking up from the current directory."""
+    current_dir = Path(__file__).parent
+    while current_dir != current_dir.parent:  # Stop at root
+        portman_dir = current_dir / 'portman'
+        if portman_dir.exists() and (portman_dir / 'bin' / 'portman.exe').exists():
+            return portman_dir
+        current_dir = current_dir.parent
+    raise RuntimeError("Could not find portman installation directory")
+
+def get_portman_exe():
+    """Get the path to the portman executable."""
+    return str(find_portman_dir() / 'bin' / 'portman.exe')
+
+def get_packages_json():
+    """Get the path to the packages.json file."""
+    return find_portman_dir() / 'lib' / 'packages.json'
 
 def run_command_capture_output(cmd):
     print(f"Debug - Command: {cmd}")
@@ -80,15 +98,16 @@ def setup():
         raise RuntimeError("Build failed")
     
     # find test package directory
-    test_pkg = Path('test_package')
+    test_pkg = Path('test/test_package')
     
     return test_pkg
 
 def test_package_running():
     print("\nTesting package execution...")
     try:
+        portman_exe = get_portman_exe()
         # Test the installed package
-        process = run_command('.\\portman\\bin\\portman.exe test-hello')
+        process = run_command(f'{portman_exe} test-hello')
         stdout, stderr = process.communicate()
         print("=== Debug Output ===")
         print(f"Return code: {process.returncode}")
@@ -102,13 +121,13 @@ def test_package_running():
             "Package 'test-hello' did not output 'Hello, World!'"
         
         # Test the linked package
-        process = run_command('.\\portman\\bin\\portman.exe test-hello-link')
+        process = run_command(f'{portman_exe} test-hello-link')
         stdout, stderr = process.communicate()
         assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
             "Package 'test-hello-link' did not output 'Hello, World!'"
         
         # Test the exe package
-        process = run_command('.\\portman\\bin\\portman.exe test-hello-exe')
+        process = run_command(f'{portman_exe} test-hello-exe')
         stdout, stderr = process.communicate()
         assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
             "Package 'test-hello-exe' did not output 'Hello, World!'"
@@ -122,11 +141,12 @@ def test_package_installation_from_dir():
     print("\nTesting package installation...")
     print("Running installation command...")
     try:
+        portman_exe = get_portman_exe()
         # Use absolute path for test_package
-        test_pkg_path = str(Path('test_package').absolute())
+        test_pkg_path = str(Path('test/test_package').absolute())
         inputs = b'1\ntest-hello\nthis is optional\n'
         process = run_command(
-            '.\\portman\\bin\\portman.exe install ' + test_pkg_path,
+            f'{portman_exe} install ' + test_pkg_path,
             input_text=inputs
         )
         print("Installation command completed")
@@ -146,11 +166,12 @@ def test_package_linking():
     print("\nTesting package installation...")
     print("Running installation command...")
     try:
+        portman_exe = get_portman_exe()
         # Use absolute path for test_package
-        test_pkg_path = str(Path('test_package').absolute())
+        test_pkg_path = str(Path('test/test_package').absolute())
         inputs = b'1\ntest-hello-link\nthis is optional\n'
         process = run_command(
-            '.\\portman\\bin\\portman.exe link ' + test_pkg_path,
+            f'{portman_exe} link ' + test_pkg_path,
             input_text=inputs
         )
         print("Installation command completed")
@@ -168,11 +189,12 @@ def test_package_linking():
 
 def test_package_removal():
     print("\nTesting package removal...")
+    portman_exe = get_portman_exe()
     # Remove package
-    process = run_command('portman\\bin\\portman.exe remove test-hello')  
-    process = run_command('portman\\bin\\portman.exe remove test-hello-link')  
-    process = run_command('portman\\bin\\portman.exe remove test-hello-exe')  
-    process = run_command('portman\\bin\\portman.exe remove test-hello-url-exe') 
+    process = run_command(f'{portman_exe} remove test-hello')  
+    process = run_command(f'{portman_exe} remove test-hello-link')  
+    process = run_command(f'{portman_exe} remove test-hello-exe')  
+    process = run_command(f'{portman_exe} remove test-hello-url-exe') 
     
     # Verify package is removed from packages.json
     with open('portman/lib/packages.json') as f:
@@ -184,11 +206,12 @@ def test_package_installation_from_exe():
     print("\nTesting package installation...")
     print("Running installation command...")
     try:
+        portman_exe = get_portman_exe()
         # Use absolute path for test_package
-        test_pkg_path = str(Path('test_package/hello.exe').absolute())
+        test_pkg_path = str(Path('test/test_package/hello.exe').absolute())
         inputs = b'1\ntest-hello-exe\nthis is optional\n'
         process = run_command(
-            '.\\portman\\bin\\portman.exe install ' + test_pkg_path,
+            f'{portman_exe} install ' + test_pkg_path,
             input_text=inputs
         )
         print("Installation command completed")
@@ -208,11 +231,12 @@ def test_package_installation_from_url_exe():
     print("\nTesting package installation...")
     print("Running installation command...")
     try:
+        portman_exe = get_portman_exe()
         # Use absolute path for test_package
         test_pkg_path = "https://raw.githubusercontent.com/mirror-shades/portman/master/test_package/hello.exe"
         inputs = b'1\ntest-hello-url-exe\nthis is optional\n'
         process = run_command(
-            '.\\portman\\bin\\portman.exe install ' + test_pkg_path,
+            f'{portman_exe} install ' + test_pkg_path,
             input_text=inputs
         )
         print("Installation command completed")
