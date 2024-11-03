@@ -419,9 +419,6 @@ fn install_local_dir(allocator: std.mem.Allocator, package_path: []const u8, is_
     };
     defer dir.close();
 
-    const package_name = std.fs.path.basename(package_path);
-    std.debug.print("Package name: {s}\n", .{package_name});
-
     // Find executables
     var exe_paths = try findExecutables(allocator, dir, package_path);
     defer {
@@ -464,8 +461,8 @@ fn install_local_dir(allocator: std.mem.Allocator, package_path: []const u8, is_
     var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
     const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
     
-    // Create the destination path in the lib directory
-    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "lib", package_name });
+    // Create the destination path in the lib directory using the keyword
+    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "lib", keyword_copy });
     defer allocator.free(lib_path);
 
     // Copy all package files to the lib directory
@@ -474,12 +471,12 @@ fn install_local_dir(allocator: std.mem.Allocator, package_path: []const u8, is_
     
     if (is_global) {
         // Create the command script only if global
-        try createGlobalScript(allocator, exe_dir, keyword_copy, package_name, selected_exe);
+        try createGlobalScript(allocator, exe_dir, keyword_copy, keyword_copy, selected_exe);
     }
 
     // Create and save package metadata
     const new_package = Package{
-        .name = try allocator.dupe(u8, package_name),
+        .name = try allocator.dupe(u8, keyword_copy),
         .path = try allocator.dupe(u8, selected_exe),
         .keyword = keyword_copy,
         .description = desc_copy,
@@ -577,30 +574,37 @@ fn install_compressed(allocator: std.mem.Allocator, package_path: []const u8, is
         std.debug.print("Warning: Could not delete temporary directory: {any}\n", .{err});
     };
 
-    // Create the output argument
-    const output_arg = try std.fmt.allocPrint(allocator, "-o{s}", .{temp_dir});
-    defer allocator.free(output_arg);
-
-    // Prepare 7zip command
-    const args = [_][]const u8{
-        "7zr",
-        "x",
-        package_path,
-        output_arg,
-        "-y"  // Auto-answer yes to queries
-    };
-
-    // Execute 7zip
-    var child = std.process.Child.init(&args, allocator);
-    const term = try child.spawnAndWait();
+    // Get absolute paths
+    const abs_package_path = try std.fs.path.resolve(allocator, &[_][]const u8{package_path});
+    defer allocator.free(abs_package_path);
     
-    if (term != .Exited or term.Exited != 0) {
-        std.debug.print("Failed to extract package: {s}\n", .{package_path});
-        return error.ExtractionFailed;
+    const abs_temp_dir = try std.fs.path.resolve(allocator, &[_][]const u8{temp_dir});
+    defer allocator.free(abs_temp_dir);
+
+    // Debug prints
+    std.debug.print("Extracting from: {s}\n", .{abs_package_path});
+    std.debug.print("Extracting to: {s}\n", .{abs_temp_dir});
+
+    const args = [_][]const u8{
+        "x",
+        abs_package_path,  // Remove quotes, pass path directly
+        try std.fmt.allocPrint(allocator, "-o{s}", .{abs_temp_dir}),  // Remove quotes, just concatenate
+        "-y"
+    };
+    defer allocator.free(args[2]);
+
+    // Debug print the command
+    std.debug.print("Running 7zr with args:", .{});
+    for (args) |arg| {
+        std.debug.print(" {s}", .{arg});
     }
+    std.debug.print("\n", .{});
+
+    // Run 7zr through the package manager
+    try run_package(allocator, "7zr", &args);
 
     // Now that we've extracted the files, install from the temp directory
-    try install_local_dir(allocator, temp_dir, is_global);
+    try install_local_dir(allocator, abs_temp_dir, is_global);
 }
 
 fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
@@ -752,6 +756,46 @@ fn link_package(allocator: std.mem.Allocator, path: []const u8, is_global: bool)
     std.debug.print("Successfully linked package: {s}\n", .{linked_name});
 }
 
+fn run_package(allocator: std.mem.Allocator, keyword: []const u8, extra_args: []const []const u8) !void {
+    if (try parse_package_info(allocator, keyword)) |package| {
+        var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+        
+        // Construct the full path to the executable
+        const exe_path = if (std.mem.startsWith(u8, package.name, "link@"))
+            try allocator.dupe(u8, package.path)  // Use the absolute path directly
+        else try std.fs.path.join(allocator, &[_][]const u8{
+            exe_dir, "..", "lib", package.name, package.path
+        });
+        defer allocator.free(exe_path);
+
+        // Collect all arguments
+        var child_args = std.ArrayList([]const u8).init(allocator);
+        defer child_args.deinit();
+        
+        // Add the executable path as the first argument
+        try child_args.append(exe_path);
+        
+        // Add any extra arguments
+        for (extra_args) |arg| {
+            try child_args.append(arg);
+        }
+
+        // Create child process
+        var child = std.process.Child.init(child_args.items, allocator);
+        child.stderr_behavior = .Inherit;
+        child.stdout_behavior = .Inherit;
+        
+        const term = try child.spawnAndWait();
+        if (term != .Exited or term.Exited != 0) {
+            return error.CommandFailed;
+        }
+    } else {
+        std.debug.print("Package not found: {s}\n", .{keyword});
+        return error.PackageNotFound;
+    }
+}
+
 pub fn run_portman() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -841,34 +885,16 @@ pub fn run_portman() !void {
                     std.debug.print("Available package: {s}\n", .{keyword});
                 }
             }
-        } else if (try parse_package_info(allocator, command)) |package| {
-            // Found the package, now execute it
-            var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
-            const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
+        } else if (try parse_package_info(allocator, command)) |_| {
+            // Collect remaining arguments into a slice
+            var remaining_args = std.ArrayList([]const u8).init(allocator);
+            defer remaining_args.deinit();
             
-            // Construct the full path to the executable
-            const exe_path = if (std.mem.startsWith(u8, package.name, "link@"))
-                try allocator.dupe(u8, package.path)  // Use the absolute path directly
-            else try std.fs.path.join(allocator, &[_][]const u8{
-                exe_dir, "..", "lib", package.name, package.path
-            });
-            defer allocator.free(exe_path);
-
-            // Collect remaining arguments
-            var child_args = std.ArrayList([]const u8).init(allocator);
-            defer child_args.deinit();
-            
-            // Add the executable path as the first argument
-            try child_args.append(exe_path);
-            
-            // Add any remaining arguments
             while (args.next()) |arg| {
-                try child_args.append(arg);
+                try remaining_args.append(arg);
             }
 
-            // Create child process
-            var child = std.process.Child.init(child_args.items, allocator);
-            _ = try child.spawnAndWait();
+            try run_package(allocator, command, remaining_args.items);
         } else {
             // No arguments provided, show help
             std.debug.print("Usage: portman <command> [options]\n", .{});

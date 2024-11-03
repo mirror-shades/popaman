@@ -311,7 +311,7 @@ fn copyPackageFiles(allocator: std.mem.Allocator, source_path: []const u8, dest_
 
 fn install_7zip(allocator: std.mem.Allocator) !void {
     std.debug.print("Installing 7-Zip...\n", .{});
-    
+     
     // Get executable directory path
     var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
     const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
