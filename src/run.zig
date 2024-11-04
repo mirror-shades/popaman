@@ -272,12 +272,18 @@ fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
     // Access the parsed data through the package field
     const packages = parsed.value.package;
     var keywords = try allocator.alloc([]const u8, packages.len);
+    errdefer {
+        for (keywords) |keyword| {
+            allocator.free(keyword);
+        }
+        allocator.free(keywords);
+    }
     
     // Get keywords from Package objects using parse_package_info
     for (packages, 0..) |package, i| {
         if (try parse_package_info(allocator, package.keyword)) |pkg| {
             defer pkg.deinit(allocator);
-            keywords[i] = pkg.keyword;
+            keywords[i] = try allocator.dupe(u8, pkg.keyword);
         }
     }
     
