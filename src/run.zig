@@ -127,12 +127,27 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package) !void {
 
     // Create new packages array with one more slot
     var new_packages = try allocator.alloc(Package, parsed.value.package.len + 1);
-    defer allocator.free(new_packages);
+    defer {
+        // Deinitialize and free new_packages
+        for (new_packages) |*pkg| {
+            pkg.deinit(allocator);
+        }
+        allocator.free(new_packages);
+    }
 
-    // Copy existing packages
-    @memcpy(new_packages[0..parsed.value.package.len], parsed.value.package);
+    // Copy existing packages using deep copy
+    for (parsed.value.package, 0..) |existing_pkg, i| {
+        new_packages[i] = try Package.init(
+            allocator,
+            existing_pkg.name,
+            existing_pkg.path,
+            existing_pkg.keyword,
+            existing_pkg.description,
+            existing_pkg.global
+        );
+    }
 
-    // Add new package
+    // Add new package (assuming package is already properly allocated)
     new_packages[new_packages.len - 1] = package;
 
     // Create new PackageFile with updated packages
