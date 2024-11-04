@@ -169,53 +169,63 @@ fn remove_package_info(allocator: std.mem.Allocator, package: Package) !void {
     var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
     const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
     
-    // Construct path to packages.json
+    // Update packages.json
+    try removeFromPackagesJson(allocator, exe_dir, package);
+    
+    // Remove associated files
+    try removePackageFiles(allocator, exe_dir, package);
+}
+
+fn removeFromPackagesJson(allocator: std.mem.Allocator, exe_dir: []const u8, package: Package) !void {
     const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "..", "lib", "packages.json"});
     defer allocator.free(packages_path);
     
-    // Read existing file
+    // Read and parse existing file
     const file = try std.fs.cwd().openFile(packages_path, .{ .mode = .read_write });
     defer file.close();
     
     const content = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
     defer allocator.free(content);
 
-    // Parse existing JSON
-    const parsed = try std.json.parseFromSlice(
-        PackageFile,
-        allocator,
-        content,
-        .{},
-    );
+    const parsed = try std.json.parseFromSlice(PackageFile, allocator, content, .{});
     defer parsed.deinit();
 
-    // Create new packages array with one less slot
+    // Create filtered package list
     var new_packages = try allocator.alloc(Package, parsed.value.package.len - 1);
-    defer allocator.free(new_packages);
+    defer {
+        for (new_packages) |*pkg| pkg.deinit(allocator);
+        allocator.free(new_packages);
+    }
 
-    // Copy packages except the one to remove
+    // Copy all packages except the one being removed
     var new_index: usize = 0;
     for (parsed.value.package) |existing_package| {
         if (!std.mem.eql(u8, existing_package.keyword, package.keyword)) {
-            new_packages[new_index] = existing_package;
+            new_packages[new_index] = try Package.init(
+                allocator,
+                existing_package.name,
+                existing_package.path,
+                existing_package.keyword,
+                existing_package.description,
+                existing_package.global
+            );
             new_index += 1;
         }
     }
 
-    // Create new PackageFile with updated packages
+    // Write updated package list back to file
     const new_package_file = PackageFile{ .package = new_packages };
-
-    // Convert to JSON string
     var string = std.ArrayList(u8).init(allocator);
     defer string.deinit();
+    
     try std.json.stringify(new_package_file, .{}, string.writer());
-
-    // Write back to file
     try file.seekTo(0);
     try file.writeAll(string.items);
     try file.setEndPos(string.items.len);
+}
 
-    // If package is global, remove the batch file
+fn removePackageFiles(allocator: std.mem.Allocator, exe_dir: []const u8, package: Package) !void {
+    // Remove global batch file if needed
     if (package.global) {
         const batch_path = try std.fs.path.join(allocator, &[_][]const u8{
             exe_dir, 
@@ -268,7 +278,7 @@ fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
         .{},
     );
     defer parsed.deinit();
-
+    
     // Access the parsed data through the package field
     const packages = parsed.value.package;
     var keywords = try allocator.alloc([]const u8, packages.len);
@@ -278,7 +288,7 @@ fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
         }
         allocator.free(keywords);
     }
-    
+
     // Get keywords from Package objects using parse_package_info
     for (packages, 0..) |package, i| {
         if (try parse_package_info(allocator, package.keyword)) |pkg| {
