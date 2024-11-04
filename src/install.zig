@@ -14,12 +14,12 @@ const PackageFile = struct {
     package: []Package,
 };
 
-fn create_portman_directory(arg_root_dir: []const u8) !void {
+fn create_popaman_directory(arg_root_dir: []const u8) !void {
     // Add null check for empty string case
     if (arg_root_dir.len > 0) {
-        std.debug.print("Installing Portman to {s}\n", .{arg_root_dir});
+        std.debug.print("Installing popaman to {s}\n", .{arg_root_dir});
     } else {
-        std.debug.print("Installing Portman to current directory\n", .{});
+        std.debug.print("Installing popaman to current directory\n", .{});
     }
     // Use an arena allocator for all our temporary allocations
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -41,7 +41,7 @@ fn create_portman_directory(arg_root_dir: []const u8) !void {
     const root_dir = if (std.mem.eql(u8, std.fs.path.basename(base_dir), "bin"))
         std.fs.path.dirname(base_dir) orelse "."
     else
-        try std.fs.path.join(allocator, &[_][]const u8{base_dir, "portman"});
+        try std.fs.path.join(allocator, &[_][]const u8{base_dir, "popaman"});
 
     // These joins aren't explicitly freed, but they're handled by the arena
     const lib_path = try std.fs.path.join(allocator, &[_][]const u8{root_dir, "lib"});
@@ -88,7 +88,7 @@ fn create_portman_directory(arg_root_dir: []const u8) !void {
     if (!std.mem.eql(u8, std.fs.path.basename(exe_dir), "bin")) {
         const new_exe_path = try std.fs.path.join(
             allocator,
-            &[_][]const u8{bin_path, "portman.exe"}
+            &[_][]const u8{bin_path, "popaman.exe"}
         );
         std.debug.print("Copying executable to: {s}\n", .{new_exe_path});
         try std.fs.copyFileAbsolute(exe_path, new_exe_path, .{});
@@ -97,7 +97,7 @@ fn create_portman_directory(arg_root_dir: []const u8) !void {
     std.debug.print("Directory structure verified/created at: {s}\n", .{root_dir});
 }
 
-// checks to see if portman is alreadyinstalled
+// checks to see if popaman is alreadyinstalled
 pub fn verify_install() !bool {
     // Use arena allocator instead of page_allocator directly
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -137,17 +137,17 @@ pub fn createInstallBat(install_bat_path: []const u8, uninstall_bat_path: []cons
         \\setlocal enabledelayedexpansion
         \\
         \\REM Get the directory of the batch file
-        \\set "portman_path=%~dp0"
-        \\if "%portman_path:~-1%"=="\" set "portman_path=%portman_path:~0,-1%"
-        \\cd "%portman_path%"
+        \\set "popaman_path=%~dp0"
+        \\if "%popaman_path:~-1%"=="\" set "popaman_path=%popaman_path:~0,-1%"
+        \\cd "%popaman_path%"
         \\cd ..
-        \\set "portman_path=%cd%"
+        \\set "popaman_path=%cd%"
         \\
-        \\REM Set PORTMAN_HOME environment variable
-        \\setx PORTMAN_HOME "%portman_path%"
+        \\REM Set popaman_HOME environment variable
+        \\setx popaman_HOME "%popaman_path%"
         \\
         \\REM Set the paths
-        \\set "bin_path=%portman_path%\bin"
+        \\set "bin_path=%popaman_path%\bin"
         \\
         \\REM Get current PATH from registry
         \\for /f "tokens=2*" %%a in ('reg query "HKEY_CURRENT_USER\Environment" /v PATH') do set "current_path=%%b"
@@ -163,7 +163,7 @@ pub fn createInstallBat(install_bat_path: []const u8, uninstall_bat_path: []cons
         \\)
         \\
         \\echo.
-        \\echo Portman environment setup complete.
+        \\echo popaman environment setup complete.
         \\echo Please restart your command prompt or terminal for the changes to take effect.
         \\
         \\endlocal
@@ -180,20 +180,20 @@ pub fn createInstallBat(install_bat_path: []const u8, uninstall_bat_path: []cons
         \\setlocal enabledelayedexpansion
         \\
         \\REM Get the directory of the batch file
-        \\set "portman_path=%~dp0"
-        \\if "%portman_path:~-1%"=="\" set "portman_path=%portman_path:~0,-1%"
-        \\cd "%portman_path%"
+        \\set "popaman_path=%~dp0"
+        \\if "%popaman_path:~-1%"=="\" set "popaman_path=%popaman_path:~0,-1%"
+        \\cd "%popaman_path%"
         \\cd ..
-        \\set "portman_path=%cd%"
+        \\set "popaman_path=%cd%"
         \\
         \\REM Set the paths
-        \\set "bin_path=%portman_path%\bin"
+        \\set "bin_path=%popaman_path%\bin"
         \\
         \\REM Get current PATH from registry
         \\for /f "tokens=2*" %%a in ('reg query "HKEY_CURRENT_USER\Environment" /v PATH') do set "current_path=%%b"
         \\
-        \\REM Remove PORTMAN_HOME environment variable
-        \\reg delete "HKEY_CURRENT_USER\Environment" /v PORTMAN_HOME /f >nul 2>&1
+        \\REM Remove popaman_HOME environment variable
+        \\reg delete "HKEY_CURRENT_USER\Environment" /v popaman_HOME /f >nul 2>&1
         \\
         \\REM Remove bin_path from PATH if present
         \\set "new_path=!current_path!"
@@ -210,7 +210,7 @@ pub fn createInstallBat(install_bat_path: []const u8, uninstall_bat_path: []cons
         \\)
         \\
         \\echo.
-        \\echo Portman environment cleanup complete.
+        \\echo popaman environment cleanup complete.
         \\echo Please restart your command prompt or terminal for the changes to take effect.
         \\
         \\endlocal
@@ -268,7 +268,7 @@ fn install_7zip(allocator: std.mem.Allocator) !void {
     const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
     
     // Create the lib directory if it doesn't exist
-    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "portman", "lib", "7zr" });
+    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "popaman", "lib", "7zr" });
     try std.fs.cwd().makePath(lib_path);
 
     defer allocator.free(lib_path);  
@@ -313,7 +313,7 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package) !void {
     const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
     
     // Construct path to packages.json
-    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman", "lib", "packages.json"});
+    const packages_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "popaman", "lib", "packages.json"});
     defer allocator.free(packages_path);
     
     // Read existing file
@@ -382,7 +382,7 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package) !void {
     }
 }
 
-pub fn install_portman() !void {
+pub fn install_popaman() !void {
     var root_dir: []const u8 = ""; // Default install path
     var force_install = false;
     var skip_path = false;  // New flag for -no-path
@@ -419,10 +419,10 @@ pub fn install_portman() !void {
     }
     
     if (root_dir.len == 0) {
-        const installation_dir = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
+        const installation_dir = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "popaman"});
         
         // confirms the user intends to install to
-        std.debug.print("No install path included. Portman will be installed to: {s}? (Y/n) ", .{installation_dir});
+        std.debug.print("No install path included. popaman will be installed to: {s}? (Y/n) ", .{installation_dir});
         
         const stdin = std.io.getStdIn().reader();
         var buf: [2]u8 = undefined;
@@ -438,20 +438,20 @@ pub fn install_portman() !void {
                 std.debug.print("Force removing existing installation at '{s}'\n", .{installation_dir});
                 try std.fs.deleteTreeAbsolute(installation_dir);
             } else {
-                std.debug.print("Error: Directory already contains a 'portman' directory\n", .{});
-                return error.PortmanDirectoryExists;
+                std.debug.print("Error: Directory already contains a 'popaman' directory\n", .{});
+                return error.popamanDirectoryExists;
             }
         }
     }
 
     // Store the actual installation directory
     const installation_dir = if (root_dir.len > 0) 
-        try std.fs.path.join(allocator, &[_][]const u8{root_dir, "portman"})
+        try std.fs.path.join(allocator, &[_][]const u8{root_dir, "popaman"})
     else 
-        try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
+        try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "popaman"});
 
-    std.debug.print("Installing Portman...\n", .{});
-    try create_portman_directory(root_dir);
+    std.debug.print("Installing popaman...\n", .{});
+    try create_popaman_directory(root_dir);
 
     const install_bat_path = try std.fs.path.join(allocator, &[_][]const u8{installation_dir, "lib", "PATH.bat"});
     const uninstall_bat_path = try std.fs.path.join(allocator, &[_][]const u8{installation_dir, "lib", "UNPATH.bat"});
@@ -466,5 +466,5 @@ pub fn install_portman() !void {
     }
 
     try install_7zip(allocator);
-    std.debug.print("Portman installed successfully!\n", .{});
+    std.debug.print("popaman installed successfully!\n", .{});
 }

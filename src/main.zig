@@ -6,8 +6,8 @@ pub fn main() !void {
     const installed = try install.verify_install();
     
     if (installed) {
-        try run.run_portman();
+        try run.run_popaman();
     } else {
-        try install.install_portman();
+        try install.install_popaman();
     }
 }

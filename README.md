@@ -1,8 +1,8 @@
-# Portman (Portable Package Manager 📦)
+<h1 style="font-size: 48px;"><img style="display: inline; vertical-align: middle;" src="popaman.png" alt="popaman Logo" width="75"/> popaman</h1>
 
-<img style="display: block; margin: 0 auto;" src="portman.png" alt="Portman Logo" width="150"/>
+## (Po)rtable (Pa)ckage (Man)ager
 
-Portman is a lightweight package manager for managing portable Windows applications. It allows you to install, manage, and run portable apps from a centralized location with optional global access. It focuses on simplicity and ease of use, allowing you to install and run portable applications with a few simple commands.
+popaman is a lightweight package manager for managing portable Windows applications. It allows you to install, manage, and run portable apps from a centralized location with optional global access. It focuses on simplicity and ease of use, allowing you to install and run portable applications with a few simple commands.
 
 ## Features
 
@@ -33,7 +33,7 @@ Portman is a lightweight package manager for managing portable Windows applicati
 - Simple but powerful command-line interface
 - Extensible to support various package formats and sources
 
-## Building and Installing Portman
+## Building and Installing popaman
 
 To build from source, you will need Python for the build script and Zig 0.14 for compilation. Run the `build.py` script to compile the installer:
 
@@ -41,26 +41,26 @@ To build from source, you will need Python for the build script and Zig 0.14 for
 python build.py
 ```
 
-The Portman installation executable will create an installation directory in the current working directory. It also accepts optional arguments to specify the installation directory, force overwrite an existing installation, or skip adding Portman to the PATH.
+The popaman installation executable will create an installation directory in the current working directory. It also accepts optional arguments to specify the installation directory, force overwrite an existing installation, or skip adding popaman to the PATH.
 
 ```
-./install-portman.exe [directory] [-f] [-no-path]
+./install-popaman.exe [directory] [-f] [-no-path]
 ```
 
 - `directory`: Optional. Specify the installation directory.
 - `-f`: Force overwrite an existing installation.
-- `-no-path`: Skip adding Portman to the system PATH.
+- `-no-path`: Skip adding popaman to the system PATH.
 
-## Using Portman
+## Using popaman
 
-Portman provides a simple command-line interface to manage your portable applications.
+popaman provides a simple command-line interface to manage your portable applications.
 
 ### Installing a Package
 
 To install a package, use the `install` command followed by the package source. Packages can be installed from local directories, executable files, compressed archives, or URLs.
 
 ```
-portman install <package path> [options]
+popaman install <package path> [options]
 ```
 
 Options:
@@ -72,31 +72,31 @@ Examples:
 - Install from a local directory:
 
   ```
-  portman install path/to/local/package
+  popaman install path/to/local/package
   ```
 
 - Install an executable file:
 
   ```
-  portman install path/to/executable.exe
+  popaman install path/to/executable.exe
   ```
 
 - Install from a compressed archive:
 
   ```
-  portman install path/to/archive.7z
+  popaman install path/to/archive.7z
   ```
 
 - Install from a URL:
 
   ```
-  portman install https://example.com/package.exe
+  popaman install https://example.com/package.exe
   ```
 
 - Install globally:
 
   ```
-  portman install <package source> -g
+  popaman install <package source> -g
   ```
 
 ### Linking a Package
@@ -104,7 +104,7 @@ Examples:
 Link an existing package from another location without copying the files.
 
 ```
-portman link <path> [options]
+popaman link <path> [options]
 ```
 
 Options:
@@ -116,23 +116,23 @@ Examples:
 - Link a package from a local directory:
 
   ```
-  portman link path/to/package -g
+  popaman link path/to/package -g
   ```
 
 ### Global Packages
 
-Global packages are available to all users on the system and can be accessed from any command prompt. When a package is installed globally, a `.cmd` file is added to the `portman/bin` directory, which is included in the system PATH.
+Global packages are available to all users on the system and can be accessed from any command prompt. When a package is installed globally, a `.cmd` file is added to the `popaman/bin` directory, which is included in the system PATH.
 
 If a package was not initially installed globally, you can add it to the global list:
 
 ```
-portman global <package> -a
+popaman global <package> -a
 ```
 
 Or remove an existing package from the global list, use the global command with the `-r` flag:
 
 ```
-portman global <package> -r
+popaman global <package> -r
 
 ```
 
@@ -141,7 +141,7 @@ portman global <package> -r
 Once installed, you can run a package using its assigned keyword:
 
 ```
-portman <keyword> [options]
+popaman <keyword> [options]
 ```
 
 Examples:
@@ -149,7 +149,7 @@ Examples:
 - Run a package:
 
   ```
-  portman myapp --help
+  popaman myapp --help
   ```
 
 ### Removing a Package
@@ -157,7 +157,7 @@ Examples:
 To remove an installed package:
 
 ```
-portman remove <package>
+popaman remove <package>
 ```
 
 ### Listing Packages
@@ -165,18 +165,18 @@ portman remove <package>
 List all available packages:
 
 ```
-portman list
+popaman list
 ```
 
 List all available packages with descriptions:
 
 ```
-portman list -v
+popaman list -v
 ```
 
 ## Package Format
 
-The `packages.json` file defines how Portman locates and manages packages. Below is an example entry in `packages.json`:
+The `packages.json` file defines how popaman locates and manages packages. Below is an example entry in `packages.json`:
 
 ```json
 {
@@ -198,17 +198,17 @@ Manual installation can be done by adding the portable package to the `lib` dire
 
 ## Dependencies
 
-Portman utilizes `7zr` (part of the 7-Zip suite) for extracting compressed archives. Ensure that `7zr` is installed and accessible in your system PATH.
+popaman utilizes `7zr` (part of the 7-Zip suite) for extracting compressed archives. Ensure that `7zr` is installed and accessible in your system PATH.
 
 ## Troubleshooting
 
-- **Command Not Found**: Ensure that `portman` is added to your system PATH. You can add it by running the batch file `PATH.bat` in the lib directory.
+- **Command Not Found**: Ensure that `popaman` is added to your system PATH. You can add it by running the batch file `PATH.bat` in the lib directory.
 - **Installation Errors**: Verify that the package source is correct and accessible.
 - **Extraction Failures**: Make sure `7zr` is installed and available.
 
 ## Contributing
 
-Contributions are welcome! Please submit issues or pull requests to help improve Portman.
+Contributions are welcome! Please submit issues or pull requests to help improve popaman.
 
 ## License
 
@@ -220,11 +220,11 @@ Contributions are welcome! Please submit issues or pull requests to help improve
 
 ---
 
-Feel free to explore, contribute, and customize Portman to fit your portable application management needs!
+Feel free to explore, contribute, and customize popaman to fit your portable application management needs!
 
 ## TODO
 
-- [x] Usage: portman <command> [options]
+- [x] Usage: popaman <command> [options]
 - [x] install <package> Install a package (currently only supports installing from a downloaded binary)
 - [x] install <package> -g Install a package globally
 - [x] global <package> -a Add package to global list

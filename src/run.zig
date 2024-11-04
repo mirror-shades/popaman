@@ -1,4 +1,4 @@
-//this is the file that will run the portman executable
+//this is the file that will run the popaman executable
 // it should check args and run the appropriate command
 
 const std = @import("std");
@@ -854,7 +854,7 @@ fn run_package(allocator: std.mem.Allocator, keyword: []const u8, extra_args: []
 }
 
 fn help_menu() !void {
-    std.debug.print("Usage: portman <command> [options]\n", .{});
+    std.debug.print("Usage: popaman <command> [options]\n", .{});
     std.debug.print("Commands:\n", .{});
     std.debug.print("  install <package>     Install a package\n", .{});
     std.debug.print("  install <package> -g  Install a package globally\n", .{});
@@ -866,7 +866,7 @@ fn help_menu() !void {
     std.debug.print("  list -v               List all available packages with descriptions\n", .{});
 }
 
-pub fn run_portman() !void {
+pub fn run_popaman() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -892,7 +892,7 @@ pub fn run_portman() !void {
                 try install_package(allocator, package, is_global);
             } else {
                 std.debug.print("Error: Package path is required\n", .{});
-                std.debug.print("Usage: portman install <package path> [-g]\n", .{});
+                std.debug.print("Usage: popaman install <package path> [-g]\n", .{});
                 return;
             }
         } else if (std.mem.eql(u8, command, "global")) {
@@ -906,8 +906,8 @@ pub fn run_portman() !void {
                     }
                     else {
                         std.debug.print("Use -a or -r to add or remove\n", .{});
-                        std.debug.print("portman global <package> -a\n", .{});
-                        std.debug.print("portman global <package> -r\n", .{});
+                        std.debug.print("popaman global <package> -a\n", .{});
+                        std.debug.print("popaman global <package> -r\n", .{});
                         return;
                     }
                 }
@@ -917,7 +917,7 @@ pub fn run_portman() !void {
                 try remove_package(allocator, package);
             } else {
                 std.debug.print("Error: Package name is required\n", .{});
-                std.debug.print("Usage: portman remove <package-name>\n", .{});
+                std.debug.print("Usage: popaman remove <package-name>\n", .{});
             }
         } else if (std.mem.eql(u8, command, "link")) {
             var is_global: bool = false;
@@ -930,7 +930,7 @@ pub fn run_portman() !void {
                 try link_package(allocator, path, is_global);
             } else {
                 std.debug.print("Error: Path is required\n", .{});
-                std.debug.print("Usage: portman link <path>\n", .{});
+                std.debug.print("Usage: popaman link <path>\n", .{});
                 return;
             }
         } else if (std.mem.eql(u8, command, "list")) {
