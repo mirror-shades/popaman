@@ -796,6 +796,19 @@ fn run_package(allocator: std.mem.Allocator, keyword: []const u8, extra_args: []
     }
 }
 
+fn help_menu() !void {
+    std.debug.print("Usage: portman <command> [options]\n", .{});
+    std.debug.print("Commands:\n", .{});
+    std.debug.print("  install <package>     Install a package\n", .{});
+    std.debug.print("  install <package> -g  Install a package globally\n", .{});
+    std.debug.print("  global <package> -a   Add package to global list\n", .{});
+    std.debug.print("  global <package> -r   Remove package from global list\n", .{});
+    std.debug.print("  remove <package>      Remove a package\n", .{});
+    std.debug.print("  link <path>           Link a package from elsewhere\n", .{});
+    std.debug.print("  list                  List all available packages\n", .{});
+    std.debug.print("  list -v               List all available packages with descriptions\n", .{});
+}
+
 pub fn run_portman() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -897,16 +910,7 @@ pub fn run_portman() !void {
             try run_package(allocator, command, remaining_args.items);
         } else {
             // No arguments provided, show help
-            std.debug.print("Usage: portman <command> [options]\n", .{});
-            std.debug.print("Commands:\n", .{});
-            std.debug.print("  install <package>     Install a package\n", .{});
-            std.debug.print("  install <package> -g  Install a package globally\n", .{});
-            std.debug.print("  global <package> -a   Add package to global list\n", .{});
-            std.debug.print("  global <package> -r   Remove package from global list\n", .{});
-            std.debug.print("  remove <package>      Remove a package\n", .{});
-            std.debug.print("  link <path>           Link a package from elsewhere\n", .{});
-            std.debug.print("  list                  List all available packages\n", .{});
-            std.debug.print("  list -v               List all available packages with descriptions\n", .{});
+
         }
     }
 }
