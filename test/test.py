@@ -352,7 +352,7 @@ def test_package_installation_from_url_7z():
 def main():
     # Initialize our test tracker and set up environment
     tracker = TestTracker()
-    test_pkg = setup()
+    setup()
     
     try:
         # Test 1: Directory Package

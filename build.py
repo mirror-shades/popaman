@@ -96,10 +96,15 @@ def release():
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "release" or sys.argv[1] == "-release" or sys.argv[1] == "--release" or sys.argv[1] == "r" or sys.argv[1] == "-r" or sys.argv[1] == "--r":
-        release()
-    else:
+    if len(sys.argv) <= 1:
         build(False)
+        return
+        
+    if sys.argv[1] in ["release", "-release", "--release", "r", "-r", "--r"]:
+        release()
+        return
+        
+    build(False)
 
 if __name__ == "__main__":
     main()

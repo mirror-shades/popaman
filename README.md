@@ -123,17 +123,16 @@ Examples:
 
 Global packages are available to all users on the system and can be accessed from any command prompt. When a package is installed globally, a `.cmd` file is added to the `popaman/bin` directory, which is included in the system PATH.
 
-If a package was not initially installed globally, you can add it to the global list:
+If a package was not initially installed globally, you can add it to the global list using the `globalize` command with the `-a` flag:
 
 ```
-popaman global <package> -a
+popaman globalize <package> -a
 ```
 
-Or remove an existing package from the global list, use the global command with the `-r` flag:
+Or remove an existing package from the global list using the `globalize` command with the `-r` flag:
 
 ```
-popaman global <package> -r
-
+popaman globalize <package> -r
 ```
 
 ### Running a Package

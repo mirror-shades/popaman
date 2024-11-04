@@ -856,14 +856,94 @@ fn run_package(allocator: std.mem.Allocator, keyword: []const u8, extra_args: []
 fn help_menu() !void {
     std.debug.print("Usage: popaman <command> [options]\n", .{});
     std.debug.print("Commands:\n", .{});
-    std.debug.print("  install <package>     Install a package\n", .{});
-    std.debug.print("  install <package> -g  Install a package globally\n", .{});
-    std.debug.print("  global <package> -a   Add package to global list\n", .{});
-    std.debug.print("  global <package> -r   Remove package from global list\n", .{});
-    std.debug.print("  remove <package>      Remove a package\n", .{});
-    std.debug.print("  link <path>           Link a package from elsewhere\n", .{});
-    std.debug.print("  list                  List all available packages\n", .{});
-    std.debug.print("  list -v               List all available packages with descriptions\n", .{});
+    std.debug.print("  install <package>         Install a package\n", .{});
+    std.debug.print("  install <package> -g      Install a package globally\n", .{});
+    std.debug.print("  globalize <package> -a    Add package to global list\n", .{});
+    std.debug.print("  globalize <package> -r    Remove package from global list\n", .{});
+    std.debug.print("  remove <package>          Remove a package\n", .{});
+    std.debug.print("  link <path>               Link a package from elsewhere\n", .{});
+    std.debug.print("  list                      List all available packages\n", .{});
+    std.debug.print("  list -v                   List all available packages with descriptions\n", .{});
+}
+
+fn isInstallCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "i") or 
+           std.mem.eql(u8, cmd, "install") or
+           std.mem.eql(u8, cmd, "-i") or
+           std.mem.eql(u8, cmd, "-install") or
+           std.mem.eql(u8, cmd, "--i") or
+           std.mem.eql(u8, cmd, "--install");
+}
+
+fn isRemoveCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "r") or 
+           std.mem.eql(u8, cmd, "rm") or
+           std.mem.eql(u8, cmd, "remove") or
+           std.mem.eql(u8, cmd, "-r") or
+           std.mem.eql(u8, cmd, "-remove") or
+           std.mem.eql(u8, cmd, "--r") or
+           std.mem.eql(u8, cmd, "--remove");
+}
+
+fn isGlobalizeCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "globalize") or 
+           std.mem.eql(u8, cmd, "-globalize") or
+           std.mem.eql(u8, cmd, "--globalize");
+}
+
+fn isListCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "l") or 
+           std.mem.eql(u8, cmd, "ls") or
+           std.mem.eql(u8, cmd, "list") or
+           std.mem.eql(u8, cmd, "-l") or
+           std.mem.eql(u8, cmd, "-list") or
+           std.mem.eql(u8, cmd, "--l") or
+           std.mem.eql(u8, cmd, "--list");
+}
+
+fn isLinkCommand(cmd: []const u8) bool {
+    return std.mem.eql(u8, cmd, "ln") or 
+           std.mem.eql(u8, cmd, "link") or
+           std.mem.eql(u8, cmd, "-ln") or
+           std.mem.eql(u8, cmd, "-link") or
+           std.mem.eql(u8, cmd, "--ln") or
+           std.mem.eql(u8, cmd, "--link");
+}
+
+fn isGlobalFlag(flag: []const u8) bool {
+    return std.mem.eql(u8, flag, "g") or 
+           std.mem.eql(u8, flag, "global") or
+           std.mem.eql(u8, flag, "-g") or
+           std.mem.eql(u8, flag, "-global") or
+           std.mem.eql(u8, flag, "--g") or
+           std.mem.eql(u8, flag, "--global");
+}
+
+fn isAddFlag(flag: []const u8) bool {
+    return std.mem.eql(u8, flag, "a") or 
+           std.mem.eql(u8, flag, "add") or
+           std.mem.eql(u8, flag, "-a") or
+           std.mem.eql(u8, flag, "-add") or
+           std.mem.eql(u8, flag, "--a") or
+           std.mem.eql(u8, flag, "--add");
+}
+
+fn isRemoveFlag(flag: []const u8) bool {
+    return std.mem.eql(u8, flag, "r") or 
+           std.mem.eql(u8, flag, "rm") or
+           std.mem.eql(u8, flag, "-r") or
+           std.mem.eql(u8, flag, "-rm") or
+           std.mem.eql(u8, flag, "--r") or
+           std.mem.eql(u8, flag, "--rm");
+}
+
+fn isVerboseFlag(flag: []const u8) bool {
+    return std.mem.eql(u8, flag, "v") or 
+           std.mem.eql(u8, flag, "verbose") or
+           std.mem.eql(u8, flag, "-v") or
+           std.mem.eql(u8, flag, "-verbose") or
+           std.mem.eql(u8, flag, "--v") or
+           std.mem.eql(u8, flag, "--verbose");
 }
 
 pub fn run_popaman() !void {
@@ -878,98 +958,116 @@ pub fn run_popaman() !void {
     // Skip the executable name
     _ = args.skip();
 
-    // Check if there are any arguments
-    if (args.next()) |command| {
-        if (std.mem.eql(u8, command, "install")) {
-            if (args.next()) |package| {
-                var is_global = false;
-                // Check for -g flag
-                if (args.next()) |flag| {
-                    if (std.mem.eql(u8, flag, "-g")) {
-                        is_global = true;
-                    }
-                }
-                try install_package(allocator, package, is_global);
-            } else {
-                std.debug.print("Error: Package path is required\n", .{});
-                std.debug.print("Usage: popaman install <package path> [-g]\n", .{});
-                return;
-            }
-        } else if (std.mem.eql(u8, command, "global")) {
-            if (args.next()) |package| {
-                if (args.next()) |flag| {
-                    if (std.mem.eql(u8, flag, "-a")) {
-                        try globalize_package(allocator, package, true);
-                    } 
-                    else if (std.mem.eql(u8, flag, "-r")) {
-                        try globalize_package(allocator, package, false);
-                    }
-                    else {
-                        std.debug.print("Use -a or -r to add or remove\n", .{});
-                        std.debug.print("popaman global <package> -a\n", .{});
-                        std.debug.print("popaman global <package> -r\n", .{});
-                        return;
-                    }
-                }
-            }
-        } else if (std.mem.eql(u8, command, "remove")) {
-            if (args.next()) |package| {
-                try remove_package(allocator, package);
-            } else {
-                std.debug.print("Error: Package name is required\n", .{});
-                std.debug.print("Usage: popaman remove <package-name>\n", .{});
-            }
-        } else if (std.mem.eql(u8, command, "link")) {
-            var is_global: bool = false;
-            if (args.next()) |path| {
-                if (args.next()) |flag| {
-                    if (std.mem.eql(u8, flag, "-g")) {
-                        is_global = true;
-                    }
-                }
-                try link_package(allocator, path, is_global);
-            } else {
-                std.debug.print("Error: Path is required\n", .{});
-                std.debug.print("Usage: popaman link <path>\n", .{});
-                return;
-            }
-        } else if (std.mem.eql(u8, command, "list")) {
-            const packages = try get_packages(allocator);
-            if (args.next()) |flag| {
-                if (std.mem.eql(u8, flag, "-v")) {
-                    std.debug.print("Available packages with descriptions:\n", .{});
+    // Show help if no arguments
+    const command = args.next() orelse {
+        try help_menu();
+        return;
+    };
+
+    // Handle install command
+    if (isInstallCommand(command)) {
+        const package = args.next() orelse {
+            std.debug.print("Error: Package path is required\n", .{});
+            std.debug.print("Usage: popaman install <package path> [-g]\n", .{});
+            return;
+        };
+        const is_global = if (args.next()) |flag| isGlobalFlag(flag) else false;
+        try install_package(allocator, package, is_global);
+        return;
+    }
+
+    // Handle globalize command
+    if (isGlobalizeCommand(command)) {
+        const package = args.next() orelse {
+            std.debug.print("Error: Package name is required\n", .{});
+            return;
+        };
+        const flag = args.next() orelse {
+            std.debug.print("Error: Flag (-a or -r) is required\n", .{});
+            return;
+        };
+        
+        if (isAddFlag(flag)) {
+            try globalize_package(allocator, package, true);
+            return;
+        }
+        if (isRemoveFlag(flag)) {
+            try globalize_package(allocator, package, false);
+            return;
+        }
+        
+        std.debug.print("Use -a or -r to add or remove\n", .{});
+        std.debug.print("popaman global <package> -a\n", .{});
+        std.debug.print("popaman global <package> -r\n", .{});
+        return;
+    }
+
+    // Handle remove command
+    if (isRemoveCommand(command)) {
+        const package = args.next() orelse {
+            std.debug.print("Error: Package name is required\n", .{});
+            std.debug.print("Usage: popaman remove <package-name>\n", .{});
+            return;
+        };
+        try remove_package(allocator, package);
+        return;
+    }
+
+    // Handle link command
+    if (isLinkCommand(command)) {
+        const path = args.next() orelse {
+            std.debug.print("Error: Path is required\n", .{});
+            std.debug.print("Usage: popaman link <path>\n", .{});
+            return;
+        };
+        const is_global = if (args.next()) |flag| isGlobalFlag(flag) else false;
+        try link_package(allocator, path, is_global);
+        return;
+    }
+
+    // Handle list command
+    if (isListCommand(command)) {
+        const packages = try get_packages(allocator);
+        const verbose = if (args.next()) |flag| isVerboseFlag(flag) else false;
+        
+        if (verbose) {
+            std.debug.print("Available packages with descriptions:\n", .{});
             for (packages) |keyword| {
                 if (try parse_package_info(allocator, keyword)) |pkg| {
-                        defer pkg.deinit(allocator);
-                        std.debug.print("\n({s}\\{s}) {s} \nGlobal: {}\nDescription: {s}\n", .{
-                            pkg.name, 
-                            pkg.path,
-                            pkg.keyword, 
-                            pkg.global,
-                            pkg.description
-                            });
-                        }
-                    }
-                }
-            } else {
-                for (packages) |keyword| {
-                    std.debug.print("Available package: {s}\n", .{keyword});
-                }
+                    defer pkg.deinit(allocator);
+                    std.debug.print("\n({s}\\{s}) {s} \nGlobal: {}\nDescription: {s}\n", .{
+                        pkg.name, 
+                        pkg.path,
+                        pkg.keyword, 
+                        pkg.global,
+                        pkg.description
+                    });
+                }   
             }
-        } else if (try parse_package_info(allocator, command)) |pkg| {
-            defer pkg.deinit(allocator);
-            // Collect remaining arguments into a slice
-            var remaining_args = std.ArrayList([]const u8).init(allocator);
-            defer remaining_args.deinit();
-            
-            while (args.next()) |arg| {
-                try remaining_args.append(arg);
-            }
-
-            try run_package(allocator, command, remaining_args.items);
-        } else {
-            // No arguments provided, show help
-            try help_menu();
+            return;
         }
+
+        for (packages) |keyword| {
+            std.debug.print("Available package: {s}\n", .{keyword});
+        }
+        return;
     }
+
+    // Try to run as package command
+    if (try parse_package_info(allocator, command)) |pkg| {
+        defer pkg.deinit(allocator);
+        var remaining_args = std.ArrayList([]const u8).init(allocator);
+        defer remaining_args.deinit();
+        
+        while (args.next()) |arg| {
+            try remaining_args.append(arg);
+        }
+
+        try run_package(allocator, command, remaining_args.items);
+        return;
+    }
+
+    // If no other command matched, show help
+    std.debug.print("Invalid command: {s}\n", .{command});
+    try help_menu();
 }
