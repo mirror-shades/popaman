@@ -33,45 +33,34 @@ fn create_portman_directory(arg_root_dir: []const u8) !void {
 
     // Convert arg_root_dir to absolute path if provided
     const base_dir = if (arg_root_dir.len > 0) 
-        try std.fs.cwd().realpathAlloc(allocator, arg_root_dir)
+        try std.fs.cwd().realpathAlloc(allocator, arg_root_dir)  // This is freed by arena
     else 
         exe_dir;
 
-    // Always create a portman subdirectory
+    // This join result isn't explicitly freed, but it's handled by the arena
     const root_dir = if (std.mem.eql(u8, std.fs.path.basename(base_dir), "bin"))
         std.fs.path.dirname(base_dir) orelse "."
     else
         try std.fs.path.join(allocator, &[_][]const u8{base_dir, "portman"});
 
-    std.debug.print("Creating directory structure in: {s}\n", .{root_dir});
-
-    // Create root dir if needed
-    std.fs.makeDirAbsolute(root_dir) catch |err| {
-        if (err != error.PathAlreadyExists) {
-            std.debug.print("Error creating root dir: {any}\n", .{err});
-            return err;
-        }
-    };
-
-    // Create lib and bin directories
+    // These joins aren't explicitly freed, but they're handled by the arena
     const lib_path = try std.fs.path.join(allocator, &[_][]const u8{root_dir, "lib"});
     const bin_path = try std.fs.path.join(allocator, &[_][]const u8{root_dir, "bin"});
-    
+
     std.debug.print("Creating lib directory: {s}\n", .{lib_path});
-    std.fs.makeDirAbsolute(lib_path) catch |err| {
-        if (err != error.PathAlreadyExists) {
-            std.debug.print("Error creating lib dir: {any}\n", .{err});
-            return err;
-        }
+    // Use makePath instead of makeDirAbsolute to create parent directories
+    std.fs.cwd().makePath(lib_path) catch |err| {
+        std.debug.print("Error creating lib dir: {any}\n", .{err});
+        return err;
     };
 
     std.debug.print("Creating bin directory: {s}\n", .{bin_path});
-    std.fs.makeDirAbsolute(bin_path) catch |err| {
-        if (err != error.PathAlreadyExists) {
-            std.debug.print("Error creating bin dir: {any}\n", .{err});
-            return err;
-        }
+    // Use makePath for bin directory as well
+    std.fs.cwd().makePath(bin_path) catch |err| {
+        std.debug.print("Error creating bin dir: {any}\n", .{err});
+        return err;
     };
+
 
     // Create packages.json
     const packages_path = try std.fs.path.join(allocator, &[_][]const u8{lib_path, "packages.json"});
@@ -141,7 +130,8 @@ pub fn verify_install() !bool {
     return true;
 }
 
-pub fn createInstallBat(output_path: []const u8) !void {
+pub fn createInstallBat(install_bat_path: []const u8, uninstall_bat_path: []const u8) !void {
+
     const batch_contents =
         \\@echo off
         \\setlocal enabledelayedexpansion
@@ -181,96 +171,56 @@ pub fn createInstallBat(output_path: []const u8) !void {
         \\
     ;
 
-    const file = try std.fs.createFileAbsolute(output_path, .{});
+    const file = try std.fs.createFileAbsolute(install_bat_path, .{});
     defer file.close();
     try file.writeAll(batch_contents);
-}
 
-pub fn install_portman() !void {
-    var root_dir: []const u8 = ""; // Default install path
-    var force_install = false;
-    var skip_path = false;  // New flag for -no-path
-    
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
+    const unpath_contents =
+        \\@echo off
+        \\setlocal enabledelayedexpansion
+        \\
+        \\REM Get the directory of the batch file
+        \\set "portman_path=%~dp0"
+        \\if "%portman_path:~-1%"=="\" set "portman_path=%portman_path:~0,-1%"
+        \\cd "%portman_path%"
+        \\cd ..
+        \\set "portman_path=%cd%"
+        \\
+        \\REM Set the paths
+        \\set "bin_path=%portman_path%\bin"
+        \\
+        \\REM Get current PATH from registry
+        \\for /f "tokens=2*" %%a in ('reg query "HKEY_CURRENT_USER\Environment" /v PATH') do set "current_path=%%b"
+        \\
+        \\REM Remove PORTMAN_HOME environment variable
+        \\reg delete "HKEY_CURRENT_USER\Environment" /v PORTMAN_HOME /f >nul 2>&1
+        \\
+        \\REM Remove bin_path from PATH if present
+        \\set "new_path=!current_path!"
+        \\set "new_path=!new_path:;%bin_path%=!"
+        \\set "new_path=!new_path:%bin_path%;=!"
+        \\set "new_path=!new_path:%bin_path%=!"
+        \\
+        \\REM Update PATH only if it was changed
+        \\if not "!new_path!"=="!current_path!" (
+        \\    setx PATH "!new_path!"
+        \\    echo Removed %bin_path% from PATH.
+        \\) else (
+        \\    echo %bin_path% was not found in PATH.
+        \\)
+        \\
+        \\echo.
+        \\echo Portman environment cleanup complete.
+        \\echo Please restart your command prompt or terminal for the changes to take effect.
+        \\
+        \\endlocal
+        \\pause
+        \\
+    ;
 
-    // Get executable path early
-    var buffer: [std.fs.max_path_bytes]u8 = undefined;
-    const exe_path = try std.fs.selfExePath(&buffer);
-    const exe_dir = std.fs.path.dirname(exe_path) orelse ".";
-
-    var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
-    _ = args.skip(); // Skip executable name
-    
-    // Process arguments
-    while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "-f")) {
-            force_install = true;
-            continue;
-        }
-        if (std.mem.eql(u8, arg, "-no-path")) {
-            skip_path = true;
-            continue;
-        }
-        // If we already have a root_dir, this is an unexpected argument
-        if (root_dir.len > 0) {
-            std.debug.print("Error: Unexpected argument '{s}'\n", .{arg});
-            return error.UnexpectedArgument;
-        }
-        root_dir = arg;
-    }
-    
-    if (root_dir.len == 0) {
-        const default_path = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
-        // confirms the user intends to install to
-        std.debug.print("No install path included. Portman will be installed to: {s}? (Y/n) ", .{default_path});
-        
-        const stdin = std.io.getStdIn().reader();
-        var buf: [2]u8 = undefined;
-        const amt = try stdin.read(&buf);
-        
-        if (amt > 0 and (buf[0] == 'n' or buf[0] == 'N')) {
-            std.debug.print("Installation cancelled\n", .{});
-            return;
-        }
-        
-        const portman_path = default_path;
-        
-        if (std.fs.cwd().access(portman_path, .{}) catch null != null) {
-            if (force_install) {
-                std.debug.print("Force removing existing installation at '{s}'\n", .{portman_path});
-                try std.fs.deleteTreeAbsolute(portman_path);
-            } else {
-                std.debug.print("Error: Directory already contains a 'portman' directory\n", .{});
-                return error.PortmanDirectoryExists;
-            }
-        }
-    }
-
-    // Store the actual installation directory
-    const installation_dir = if (root_dir.len > 0) 
-        try std.fs.path.join(allocator, &[_][]const u8{root_dir, "portman"})  // <-- Fix here
-    else 
-        try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
-
-    std.debug.print("Installing Portman...\n", .{});
-    try create_portman_directory(root_dir);
-
-    const install_bat_path = try std.fs.path.join(allocator, &[_][]const u8{installation_dir, "lib", "PATH.bat"});
-    try createInstallBat(install_bat_path);
-
-    // Add bin directory to PATH if not skipped
-    if (!skip_path) {
-        _ = try std.process.Child.run(.{
-            .allocator = allocator,
-            .argv = &[_][]const u8{install_bat_path},
-        });
-    }
-
-    try install_7zip(allocator);
-    std.debug.print("Portman installed successfully!\n", .{});
+    const unpath_file = try std.fs.createFileAbsolute(uninstall_bat_path, .{});
+    defer unpath_file.close();
+    try unpath_file.writeAll(unpath_contents);
 }
 
 fn copyPackageFiles(allocator: std.mem.Allocator, source_path: []const u8, dest_dir: []const u8) !void {
@@ -281,6 +231,7 @@ fn copyPackageFiles(allocator: std.mem.Allocator, source_path: []const u8, dest_
     defer source_dir.close();
 
     var walker = try source_dir.walk(allocator);
+    errdefer walker.deinit();
     defer walker.deinit();
 
     while (try walker.next()) |entry| {
@@ -316,16 +267,14 @@ fn install_7zip(allocator: std.mem.Allocator) !void {
     var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
     const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
     
-    // Create the destination path in the lib directory
-    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "portman", "lib", "7zr" });
-    defer allocator.free(lib_path);
-
     // Create the lib directory if it doesn't exist
+    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "portman", "lib", "7zr" });
     try std.fs.cwd().makePath(lib_path);
 
-    // Set up the destination file path
+    defer allocator.free(lib_path);  
+
     const dest_path = try std.fs.path.join(allocator, &[_][]const u8{ lib_path, "7zr.exe" });
-    defer allocator.free(dest_path);
+    defer allocator.free(dest_path); 
 
     // Prepare curl command
     const args = [_][]const u8{
@@ -383,15 +332,29 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package) !void {
     );
     defer parsed.deinit();
 
-    // Create new packages array with one more slot
+    // Create new array with space for all packages
     var new_packages = try allocator.alloc(Package, parsed.value.package.len + 1);
     defer allocator.free(new_packages);
 
-    // Copy existing packages
-    @memcpy(new_packages[0..parsed.value.package.len], parsed.value.package);
+    // Deep copy existing packages
+    for (parsed.value.package, 0..) |src_package, i| {
+        new_packages[i] = Package{
+            .name = try allocator.dupe(u8, src_package.name),
+            .path = try allocator.dupe(u8, src_package.path),
+            .keyword = try allocator.dupe(u8, src_package.keyword),
+            .description = try allocator.dupe(u8, src_package.description),
+            .global = src_package.global,
+        };
+    }
 
-    // Add new package
-    new_packages[new_packages.len - 1] = package;
+    // Deep copy new package
+    new_packages[new_packages.len - 1] = Package{
+        .name = try allocator.dupe(u8, package.name),
+        .path = try allocator.dupe(u8, package.path),
+        .keyword = try allocator.dupe(u8, package.keyword),
+        .description = try allocator.dupe(u8, package.description),
+        .global = package.global,
+    };
 
     // Create new PackageFile with updated packages
     const new_package_file = PackageFile{ .package = new_packages };
@@ -405,4 +368,103 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package) !void {
     try file.seekTo(0);
     try file.writeAll(string.items);
     try file.setEndPos(string.items.len);
+
+    // These allocations are properly freed
+    defer allocator.free(packages_path);
+    defer allocator.free(content);
+    
+    // Good cleanup of allocated package strings
+    for (new_packages) |*pkg| {
+        allocator.free(pkg.name);
+        allocator.free(pkg.path);
+        allocator.free(pkg.keyword);
+        allocator.free(pkg.description);
+    }
+}
+
+pub fn install_portman() !void {
+    var root_dir: []const u8 = ""; // Default install path
+    var force_install = false;
+    var skip_path = false;  // New flag for -no-path
+    
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // Get executable path early
+    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const exe_path = try std.fs.selfExePath(&buffer);
+    const exe_dir = std.fs.path.dirname(exe_path) orelse ".";
+
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
+    _ = args.skip(); // Skip executable name
+    
+    // Process arguments
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "-f")) {
+            force_install = true;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "-no-path")) {
+            skip_path = true;
+            continue;
+        }
+        // If we already have a root_dir, this is an unexpected argument
+        if (root_dir.len > 0) {
+            std.debug.print("Error: Unexpected argument '{s}'\n", .{arg});
+            return error.UnexpectedArgument;
+        }
+        root_dir = arg;
+    }
+    
+    if (root_dir.len == 0) {
+        const installation_dir = try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
+        
+        // confirms the user intends to install to
+        std.debug.print("No install path included. Portman will be installed to: {s}? (Y/n) ", .{installation_dir});
+        
+        const stdin = std.io.getStdIn().reader();
+        var buf: [2]u8 = undefined;
+        const amt = try stdin.read(&buf);
+        
+        if (amt > 0 and (buf[0] == 'n' or buf[0] == 'N')) {
+            std.debug.print("Installation cancelled\n", .{});
+            return;
+        }
+        
+        if (std.fs.cwd().access(installation_dir, .{}) catch null != null) {
+            if (force_install) {
+                std.debug.print("Force removing existing installation at '{s}'\n", .{installation_dir});
+                try std.fs.deleteTreeAbsolute(installation_dir);
+            } else {
+                std.debug.print("Error: Directory already contains a 'portman' directory\n", .{});
+                return error.PortmanDirectoryExists;
+            }
+        }
+    }
+
+    // Store the actual installation directory
+    const installation_dir = if (root_dir.len > 0) 
+        try std.fs.path.join(allocator, &[_][]const u8{root_dir, "portman"})
+    else 
+        try std.fs.path.join(allocator, &[_][]const u8{exe_dir, "portman"});
+
+    std.debug.print("Installing Portman...\n", .{});
+    try create_portman_directory(root_dir);
+
+    const install_bat_path = try std.fs.path.join(allocator, &[_][]const u8{installation_dir, "lib", "PATH.bat"});
+    const uninstall_bat_path = try std.fs.path.join(allocator, &[_][]const u8{installation_dir, "lib", "UNPATH.bat"});
+    try createInstallBat(install_bat_path, uninstall_bat_path);
+
+    // Add bin directory to PATH if not skipped
+    if (!skip_path) {
+        _ = try std.process.Child.run(.{
+            .allocator = allocator,
+            .argv = &[_][]const u8{install_bat_path},
+        });
+    }
+
+    try install_7zip(allocator);
+    std.debug.print("Portman installed successfully!\n", .{});
 }

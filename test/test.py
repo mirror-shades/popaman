@@ -283,10 +283,9 @@ def test_package_installation_from_exe():
         raise
     
     print("Verifying installation...")
-    #Verify package exists in packages.json
     with open('portman/lib/packages.json') as f:
         packages = json.load(f)
-        assert any(p['keyword'] == 'test-hello' for p in packages['package']), \
+        assert any(p['keyword'] == 'test-hello-exe' for p in packages['package']), \
             "Package not found in packages.json"
     print("Verification complete")
 
