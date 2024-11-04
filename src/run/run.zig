@@ -595,24 +595,24 @@ fn install_exe(allocator: std.mem.Allocator, package_path: []const u8, is_global
     var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
     const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
 
-    // Get the exe name without extension
-    const exe_name = std.fs.path.stem(package_path);
-    
-    // Create the destination path in the lib directory
-    const lib_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "lib", exe_name });
-    defer allocator.free(lib_path);
+    // Create a temporary directory for the exe
+    const temp_dir = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "..", "temp", "exe_install" });
+    defer allocator.free(temp_dir);
 
-    // Create the lib directory if it doesn't exist
-    try std.fs.cwd().makePath(lib_path);
+    // Create the temp directory if it doesn't exist
+    try std.fs.cwd().makePath(temp_dir);
+    defer std.fs.deleteTreeAbsolute(temp_dir) catch |err| {
+        std.debug.print("Warning: Could not delete temporary directory: {any}\n", .{err});
+    };
 
-    // Copy the exe to the new directory
-    const dest_path = try std.fs.path.join(allocator, &[_][]const u8{ lib_path, std.fs.path.basename(package_path) });
+    // Copy the exe to the temp directory
+    const dest_path = try std.fs.path.join(allocator, &[_][]const u8{ temp_dir, std.fs.path.basename(package_path) });
     defer allocator.free(dest_path);
 
     try std.fs.copyFileAbsolute(package_path, dest_path, .{});
 
-    // Now that we've set up the directory structure, install it as a local dir
-    try install_local_dir(allocator, lib_path, is_global);
+    // Now install from the temp directory, which will handle getting the keyword and setting up the package
+    try install_local_dir(allocator, temp_dir, is_global);
 }
 
 fn install_compressed(allocator: std.mem.Allocator, package_path: []const u8, is_global: bool) !void {
