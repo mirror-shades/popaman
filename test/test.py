@@ -1,7 +1,8 @@
 import subprocess
 import json
-from pathlib import Path
+import sys
 import time
+from pathlib import Path
 
 class TestCase:
     def __init__(self, name):
@@ -438,9 +439,11 @@ def main():
         )
         
         if failed_tests:
-            raise RuntimeError("Some tests failed - check the report above for details")
+            print("\nSome tests failed - check the report above for details")
+            sys.exit(1)  # Return failure exit code
         else:
             print("\nAll tests completed successfully! 🎉")
+            sys.exit(0)  # Return success exit code
 
 if __name__ == "__main__":
     main()
