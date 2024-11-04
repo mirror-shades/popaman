@@ -321,18 +321,29 @@ fn copyPackageFiles(allocator: std.mem.Allocator, source_path: []const u8, dest_
         switch (entry.kind) {
             .file => {
                 // Create parent directory if needed
-                const dest_parent = std.fs.path.dirname(dest_file_path);
-                if (dest_parent) |parent| {
-                    try std.fs.cwd().makePath(parent);
+                if (std.fs.path.dirname(dest_file_path)) |parent| {
+                    std.fs.cwd().makePath(parent) catch |err| {
+                        std.debug.print("Warning: Could not create parent directory {s}: {any}\n", .{ parent, err });
+                        continue;
+                    };
                 }
 
                 // Copy the file
-                try std.fs.copyFileAbsolute(source_file_path, dest_file_path, .{});
+                std.fs.copyFileAbsolute(source_file_path, dest_file_path, .{}) catch |err| {
+                    std.debug.print("Warning: Could not copy file {s}: {any}\n", .{ entry.path, err });
+                    continue;
+                };
             },
             .directory => {
-                try std.fs.cwd().makePath(dest_file_path);
+                std.fs.cwd().makePath(dest_file_path) catch |err| {
+                    std.debug.print("Warning: Could not create directory {s}: {any}\n", .{ dest_file_path, err });
+                    continue;
+                };
             },
-            else => {},
+            else => {
+                std.debug.print("Warning: Skipping unsupported file type for {s}\n", .{entry.path});
+                continue;
+            },
         }
     }
 }
@@ -992,3 +1003,5 @@ pub fn run_popaman() !void {
     std.debug.print("Invalid command: {s}\n", .{command});
     try help_menu();
 }
+
+
