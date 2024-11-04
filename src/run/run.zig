@@ -2,6 +2,7 @@
 // it should check args and run the appropriate command
 
 const std = @import("std");
+const cmd_helper = @import("cmd_helper.zig");
 
 // Define the root structure
 const PackageFile = struct {
@@ -866,86 +867,6 @@ fn help_menu() !void {
     std.debug.print("  list -v                   List all available packages with descriptions\n", .{});
 }
 
-fn isInstallCommand(cmd: []const u8) bool {
-    return std.mem.eql(u8, cmd, "i") or 
-           std.mem.eql(u8, cmd, "install") or
-           std.mem.eql(u8, cmd, "-i") or
-           std.mem.eql(u8, cmd, "-install") or
-           std.mem.eql(u8, cmd, "--i") or
-           std.mem.eql(u8, cmd, "--install");
-}
-
-fn isRemoveCommand(cmd: []const u8) bool {
-    return std.mem.eql(u8, cmd, "r") or 
-           std.mem.eql(u8, cmd, "rm") or
-           std.mem.eql(u8, cmd, "remove") or
-           std.mem.eql(u8, cmd, "-r") or
-           std.mem.eql(u8, cmd, "-remove") or
-           std.mem.eql(u8, cmd, "--r") or
-           std.mem.eql(u8, cmd, "--remove");
-}
-
-fn isGlobalizeCommand(cmd: []const u8) bool {
-    return std.mem.eql(u8, cmd, "globalize") or 
-           std.mem.eql(u8, cmd, "-globalize") or
-           std.mem.eql(u8, cmd, "--globalize");
-}
-
-fn isListCommand(cmd: []const u8) bool {
-    return std.mem.eql(u8, cmd, "l") or 
-           std.mem.eql(u8, cmd, "ls") or
-           std.mem.eql(u8, cmd, "list") or
-           std.mem.eql(u8, cmd, "-l") or
-           std.mem.eql(u8, cmd, "-list") or
-           std.mem.eql(u8, cmd, "--l") or
-           std.mem.eql(u8, cmd, "--list");
-}
-
-fn isLinkCommand(cmd: []const u8) bool {
-    return std.mem.eql(u8, cmd, "ln") or 
-           std.mem.eql(u8, cmd, "link") or
-           std.mem.eql(u8, cmd, "-ln") or
-           std.mem.eql(u8, cmd, "-link") or
-           std.mem.eql(u8, cmd, "--ln") or
-           std.mem.eql(u8, cmd, "--link");
-}
-
-fn isGlobalFlag(flag: []const u8) bool {
-    return std.mem.eql(u8, flag, "g") or 
-           std.mem.eql(u8, flag, "global") or
-           std.mem.eql(u8, flag, "-g") or
-           std.mem.eql(u8, flag, "-global") or
-           std.mem.eql(u8, flag, "--g") or
-           std.mem.eql(u8, flag, "--global");
-}
-
-fn isAddFlag(flag: []const u8) bool {
-    return std.mem.eql(u8, flag, "a") or 
-           std.mem.eql(u8, flag, "add") or
-           std.mem.eql(u8, flag, "-a") or
-           std.mem.eql(u8, flag, "-add") or
-           std.mem.eql(u8, flag, "--a") or
-           std.mem.eql(u8, flag, "--add");
-}
-
-fn isRemoveFlag(flag: []const u8) bool {
-    return std.mem.eql(u8, flag, "r") or 
-           std.mem.eql(u8, flag, "rm") or
-           std.mem.eql(u8, flag, "-r") or
-           std.mem.eql(u8, flag, "-rm") or
-           std.mem.eql(u8, flag, "--r") or
-           std.mem.eql(u8, flag, "--rm");
-}
-
-fn isVerboseFlag(flag: []const u8) bool {
-    return std.mem.eql(u8, flag, "v") or 
-           std.mem.eql(u8, flag, "verbose") or
-           std.mem.eql(u8, flag, "-v") or
-           std.mem.eql(u8, flag, "-verbose") or
-           std.mem.eql(u8, flag, "--v") or
-           std.mem.eql(u8, flag, "--verbose");
-}
-
 pub fn run_popaman() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -965,19 +886,19 @@ pub fn run_popaman() !void {
     };
 
     // Handle install command
-    if (isInstallCommand(command)) {
+    if (cmd_helper.isInstallCommand(command)) {
         const package = args.next() orelse {
             std.debug.print("Error: Package path is required\n", .{});
             std.debug.print("Usage: popaman install <package path> [-g]\n", .{});
             return;
         };
-        const is_global = if (args.next()) |flag| isGlobalFlag(flag) else false;
+        const is_global = if (args.next()) |flag| cmd_helper.isGlobalFlag(flag) else false;
         try install_package(allocator, package, is_global);
         return;
     }
 
     // Handle globalize command
-    if (isGlobalizeCommand(command)) {
+    if (cmd_helper.isGlobalizeCommand(command)) {
         const package = args.next() orelse {
             std.debug.print("Error: Package name is required\n", .{});
             return;
@@ -987,11 +908,11 @@ pub fn run_popaman() !void {
             return;
         };
         
-        if (isAddFlag(flag)) {
+        if (cmd_helper.isAddFlag(flag)) {
             try globalize_package(allocator, package, true);
             return;
         }
-        if (isRemoveFlag(flag)) {
+        if (cmd_helper.isRemoveFlag(flag)) {
             try globalize_package(allocator, package, false);
             return;
         }
@@ -1003,7 +924,7 @@ pub fn run_popaman() !void {
     }
 
     // Handle remove command
-    if (isRemoveCommand(command)) {
+    if (cmd_helper.isRemoveCommand(command)) {
         const package = args.next() orelse {
             std.debug.print("Error: Package name is required\n", .{});
             std.debug.print("Usage: popaman remove <package-name>\n", .{});
@@ -1014,21 +935,21 @@ pub fn run_popaman() !void {
     }
 
     // Handle link command
-    if (isLinkCommand(command)) {
+    if (cmd_helper.isLinkCommand(command)) {
         const path = args.next() orelse {
             std.debug.print("Error: Path is required\n", .{});
             std.debug.print("Usage: popaman link <path>\n", .{});
             return;
         };
-        const is_global = if (args.next()) |flag| isGlobalFlag(flag) else false;
+        const is_global = if (args.next()) |flag| cmd_helper.isGlobalFlag(flag) else false;
         try link_package(allocator, path, is_global);
         return;
     }
 
     // Handle list command
-    if (isListCommand(command)) {
+    if (cmd_helper.isListCommand(command)) {
         const packages = try get_packages(allocator);
-        const verbose = if (args.next()) |flag| isVerboseFlag(flag) else false;
+        const verbose = if (args.next()) |flag| cmd_helper.isVerboseFlag(flag) else false;
         
         if (verbose) {
             std.debug.print("Available packages with descriptions:\n", .{});
