@@ -440,12 +440,15 @@ fn determine_source_type(package_path: []const u8) !PackageSource {
         std.debug.print("Package is a url\n", .{});
         return PackageSource.URL;
     }
-    else if (std.mem.endsWith(u8, package_path, ".zip") or 
-             std.mem.endsWith(u8, package_path, ".tar") or 
-             std.mem.endsWith(u8, package_path, ".gz") or 
-             std.mem.endsWith(u8, package_path, ".7z") or 
-             std.mem.endsWith(u8, package_path, ".rar")) {
+    else if (std.mem.endsWith(u8, package_path, ".7z")) {
         return PackageSource.Compressed;
+    }
+    //to be added later
+    else if (std.mem.endsWith(u8, package_path, ".tar") or 
+             std.mem.endsWith(u8, package_path, ".gz") or 
+             std.mem.endsWith(u8, package_path, ".zip") or 
+             std.mem.endsWith(u8, package_path, ".rar")) {
+        return PackageSource.Unknown;
     }
     else if (std.mem.endsWith(u8, package_path, ".exe") or
              std.mem.endsWith(u8, package_path, ".sh") or
@@ -575,8 +578,8 @@ fn download_package(allocator: std.mem.Allocator, package_path: []const u8) !voi
         .Exe => try install_exe(allocator, output_path, false),
         .Compressed => try install_compressed(allocator, output_path, false),
         else => {
-            std.debug.print("Downloaded file is not a recognized package type\n", .{});
-            return error.InvalidPackageType;
+            std.debug.print("Package is not a supported format\n", .{});
+            return error.Unknown;
         },
     }
 
@@ -966,7 +969,7 @@ pub fn run_portman() !void {
             try run_package(allocator, command, remaining_args.items);
         } else {
             // No arguments provided, show help
-
+            try help_menu();
         }
     }
 }
