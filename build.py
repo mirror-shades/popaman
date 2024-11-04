@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import shutil
 
 def build(release):
@@ -101,7 +102,38 @@ def main():
         return
         
     if sys.argv[1] in ["release", "-release", "--release", "r", "-r", "--r"]:
-        release()
+        # backup release folder
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        backup_name = f"release_backup_{timestamp}"
+        
+        # Remove any existing backup first
+        if os.path.exists(backup_name):
+            shutil.rmtree(backup_name)
+            
+        # Backup existing release folder if it exists
+        if os.path.exists("release"):
+            try:
+                shutil.copytree("release", backup_name)
+                shutil.rmtree("release")
+            except Exception as e:
+                print(f"Error backing up release folder: {str(e)}")
+                return
+                
+        try:
+            release()
+            # Clean up backup on success
+            if os.path.exists(backup_name):
+                shutil.rmtree(backup_name)
+                
+        except Exception as e:
+            print(f"Error creating release: {str(e)}")
+            # Restore backup if release failed
+            if os.path.exists(backup_name):
+                if os.path.exists("release"):
+                    shutil.rmtree("release")
+                shutil.copytree(backup_name, "release")
+                shutil.rmtree(backup_name)
+            
         return
         
     build(False)
