@@ -1,4 +1,4 @@
-<img src="popaman-logo.png" alt="popaman Logo" width=""/>
+<img src="assets/popaman-logo.png" alt="popaman Logo" width=""/>
 
 ## (Po)rtable (Pa)ckage (Man)ager
 
