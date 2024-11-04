@@ -5,10 +5,12 @@ def main():
     if os.path.exists("install-popaman.exe"):
         os.remove("install-popaman.exe")    
     
-    # Build command with main file (it will find imports automatically)
     build_cmd = "zig build-exe src/main.zig " \
                 "--name install-popaman " \
-                "-fstrip"
+                "-fstrip " \
+                "-freference-trace " \
+                "-target x86_64-windows-gnu " \
+                "assets/app.rc"
     
     # Execute build command
     os.system(build_cmd)

@@ -9,7 +9,7 @@ popaman is a lightweight package manager for managing portable Windows applicati
 - Install and manage portable applications from various sources:
   - Local directories
   - Executable files
-  - Compressed archives (`.zip`, `.tar`, `.gz`, `.7z`, `.rar`)
+  - Compressed archives (only `.7z` for now)
   - URLs pointing to executables or compressed files
 - Global or local package installation
 - Simple command-line interface
