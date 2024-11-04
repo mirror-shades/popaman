@@ -1,4 +1,4 @@
-<h1 style="font-size: 48px;"><img style="display: inline; vertical-align: middle;" src="popaman.png" alt="popaman Logo" width="75"/> popaman</h1>
+<img src="popaman-logo.png" alt="popaman Logo" width=""/>
 
 ## (Po)rtable (Pa)ckage (Man)ager
 
