@@ -16,13 +16,30 @@ const PackageSource = enum {
     Unknown,
 };
 
-// Update Package struct to match your JSON structure
+// the package struct has functions to handle memory allocation and deallocation
 const Package = struct {
     name: []const u8,
     path: []const u8,
     keyword: []const u8,
     description: []const u8,
     global: bool,
+
+    pub fn init(allocator: std.mem.Allocator, name: []const u8, path: []const u8, keyword: []const u8, description: []const u8, global: bool) !Package {
+        return Package{
+            .name = try allocator.dupe(u8, name),
+            .path = try allocator.dupe(u8, path),
+            .keyword = try allocator.dupe(u8, keyword),
+            .description = try allocator.dupe(u8, description),
+            .global = global,
+        };
+    }
+
+    pub fn deinit(self: *const Package, allocator: std.mem.Allocator) void {  
+        allocator.free(self.name);
+        allocator.free(self.path);
+        allocator.free(self.keyword);
+        allocator.free(self.description);
+    }
 };
 
 fn getline() ![]const u8 {
@@ -65,18 +82,20 @@ fn parse_package_info(allocator: std.mem.Allocator, keyword: []const u8) !?Packa
     defer parsed.deinit();
 
     // Search through packages for matching keyword
-    for (parsed.value.package) |package| {
-        if (std.mem.eql(u8, package.keyword, keyword)) {
-            // Create a new Package with duplicated strings
-            return Package{
-                .name = try allocator.dupe(u8, package.name),
-                .path = try allocator.dupe(u8, package.path),
-                .keyword = try allocator.dupe(u8, package.keyword),
-                .description = try allocator.dupe(u8, package.description),
-                .global = package.global,  // Add this field
-            };
+    for (parsed.value.package) |pkg| {
+        if (std.mem.eql(u8, pkg.keyword, keyword)) {
+            const new_package = try Package.init(
+                allocator,
+                pkg.name,
+                pkg.path, 
+                pkg.keyword,
+                pkg.description,
+                pkg.global
+            );
+            return new_package;
         }
     }
+
     
     return null;
 }
@@ -242,6 +261,7 @@ fn get_packages(allocator: std.mem.Allocator) ![][]const u8 {
     // Get keywords from Package objects using parse_package_info
     for (packages, 0..) |package, i| {
         if (try parse_package_info(allocator, package.keyword)) |pkg| {
+            defer pkg.deinit(allocator);
             keywords[i] = pkg.keyword;
         }
     }
@@ -630,22 +650,23 @@ fn install_package(allocator: std.mem.Allocator, package_path: []const u8, is_gl
 
 fn globalize_package(allocator: std.mem.Allocator, keyword: []const u8, is_add: bool) !void {
     // Get package info
-    if (try parse_package_info(allocator, keyword)) |package| {
+    if (try parse_package_info(allocator, keyword)) |pkg| {
+        defer pkg.deinit(allocator);
         // Get executable directory path
         var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
         const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
 
         if (is_add) {
             // Create the batch file using the full path from package info
-            try createGlobalScript(allocator, exe_dir, package.keyword, package.name, package.path);
-            std.debug.print("Added global script for: {s}\n", .{package.keyword});
+            try createGlobalScript(allocator, exe_dir, pkg.keyword, pkg.name, pkg.path);
+            std.debug.print("Added global script for: {s}\n", .{pkg.keyword});
         } else {
             // Remove the batch file
             const batch_path = try std.fs.path.join(allocator, &[_][]const u8{
                 exe_dir,
                 "..",
                 "bin",
-                try std.fmt.allocPrint(allocator, "{s}.cmd", .{package.keyword})
+                try std.fmt.allocPrint(allocator, "{s}.cmd", .{pkg.keyword})
             });
             defer allocator.free(batch_path);
 
@@ -653,7 +674,7 @@ fn globalize_package(allocator: std.mem.Allocator, keyword: []const u8, is_add: 
                 std.debug.print("Warning: Could not delete batch file: {any}\n", .{err});
                 return err;
             };
-            std.debug.print("Removed global script for: {s}\n", .{package.keyword});
+            std.debug.print("Removed global script for: {s}\n", .{pkg.keyword});
         }
     } else {
         std.debug.print("Package not found: {s}\n", .{keyword});
@@ -663,8 +684,9 @@ fn globalize_package(allocator: std.mem.Allocator, keyword: []const u8, is_add: 
 
 fn remove_package(allocator: std.mem.Allocator, keyword: []const u8) !void {
     // Get the package info first
-    if (try parse_package_info(allocator, keyword)) |package| {
-        try remove_package_info(allocator, package);
+    if (try parse_package_info(allocator, keyword)) |pkg| {
+        defer pkg.deinit(allocator);
+        try remove_package_info(allocator, pkg);
         std.debug.print("Successfully removed package: {s}\n", .{keyword});
     } else {
         std.debug.print("Package not found: {s}\n", .{keyword});
@@ -757,15 +779,16 @@ fn link_package(allocator: std.mem.Allocator, path: []const u8, is_global: bool)
 }
 
 fn run_package(allocator: std.mem.Allocator, keyword: []const u8, extra_args: []const []const u8) !void {
-    if (try parse_package_info(allocator, keyword)) |package| {
+    if (try parse_package_info(allocator, keyword)) |pkg| {
+        defer pkg.deinit(allocator);
         var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
         const exe_dir = try std.fs.selfExeDirPath(&exe_dir_buf);
         
         // Construct the full path to the executable
-        const exe_path = if (std.mem.startsWith(u8, package.name, "link@"))
-            try allocator.dupe(u8, package.path)  // Use the absolute path directly
+        const exe_path = if (std.mem.startsWith(u8, pkg.name, "link@"))
+            try allocator.dupe(u8, pkg.path)  // Use the absolute path directly
         else try std.fs.path.join(allocator, &[_][]const u8{
-            exe_dir, "..", "lib", package.name, package.path
+            exe_dir, "..", "lib", pkg.name, pkg.path
         });
         defer allocator.free(exe_path);
 
@@ -882,13 +905,14 @@ pub fn run_portman() !void {
                 if (std.mem.eql(u8, flag, "-v")) {
                     std.debug.print("Available packages with descriptions:\n", .{});
             for (packages) |keyword| {
-                if (try parse_package_info(allocator, keyword)) |package| {
+                if (try parse_package_info(allocator, keyword)) |pkg| {
+                        defer pkg.deinit(allocator);
                         std.debug.print("\n({s}\\{s}) {s} \nGlobal: {}\nDescription: {s}\n", .{
-                            package.name, 
-                            package.path,
-                            package.keyword, 
-                            package.global,
-                            package.description
+                            pkg.name, 
+                            pkg.path,
+                            pkg.keyword, 
+                            pkg.global,
+                            pkg.description
                             });
                         }
                     }
@@ -898,7 +922,8 @@ pub fn run_portman() !void {
                     std.debug.print("Available package: {s}\n", .{keyword});
                 }
             }
-        } else if (try parse_package_info(allocator, command)) |_| {
+        } else if (try parse_package_info(allocator, command)) |pkg| {
+            defer pkg.deinit(allocator);
             // Collect remaining arguments into a slice
             var remaining_args = std.ArrayList([]const u8).init(allocator);
             defer remaining_args.deinit();
