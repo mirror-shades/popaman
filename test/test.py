@@ -115,10 +115,10 @@ def run_command(cmd, input_text=None):
         for inp in inputs:
             if inp:  # Only send non-empty inputs
                 if is_url_download:
-                    time.sleep(0.5)
+                    time.sleep(1)
                 process.stdin.write(inp + b'\n')
                 process.stdin.flush()
-                time.sleep(0.1)  # Give the program time to process each input
+                time.sleep(0.2)  # Increased from 0.1
     
     stdout, stderr = process.communicate()
     
@@ -131,19 +131,22 @@ def run_command(cmd, input_text=None):
     return process
 
 def setup():
-    # Build the project first
     print("Building project...")
-    # Run build script with encoded input
     process = run_command('python build.py', ''.encode('utf-8'))
     if process.returncode != 0:
         raise RuntimeError("Build failed")
+    
+    # Add delay after build
+    time.sleep(1)  # Give filesystem time to settle
+    
     process = run_command('install-popaman.exe -f', input_text='y\n'.encode('utf-8'))
     if process.returncode != 0:
         raise RuntimeError("Build failed")
     
-    # find test package directory
-    test_pkg = Path('test/test_package')
+    # Add delay after installation
+    time.sleep(1)  # Give filesystem time to settle
     
+    test_pkg = Path('test/test_package')
     return test_pkg
 
 def test_package_running():
@@ -252,13 +255,12 @@ def test_package_linking():
 def test_package_removal():
     print("\nTesting package removal...")
     popaman_exe = get_popaman_exe()
-    # Remove package
-    process = run_command(f'{popaman_exe} remove test-hello')  
-    process = run_command(f'{popaman_exe} remove test-hello-link')  
-    process = run_command(f'{popaman_exe} remove test-hello-exe')  
-    process = run_command(f'{popaman_exe} remove test-hello-url-exe') 
-    process = run_command(f'{popaman_exe} remove test-hello-7z') 
-    process = run_command(f'{popaman_exe} remove test-hello-url-7z') 
+    
+    # Add delays between removals
+    for pkg in ['test-hello', 'test-hello-link', 'test-hello-exe', 
+                'test-hello-url-exe', 'test-hello-7z', 'test-hello-url-7z']:
+        process = run_command(f'{popaman_exe} remove {pkg}')
+        time.sleep(0.5)  # Give filesystem time between removals
     
     # Verify package is removed from packages.json
     with open('popaman/lib/packages.json') as f:
