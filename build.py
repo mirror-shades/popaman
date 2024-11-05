@@ -8,22 +8,34 @@ def build(release):
     try:
         if os.path.exists("install-popaman.exe"):
             os.remove("install-popaman.exe")    
-        
+
         build_cmd = "zig build-exe src/main.zig " \
-                "--name install-popaman " \
-                "-fstrip " \
-                "-freference-trace " \
-                "-target x86_64-windows-gnu "
-        
+            "--name install-popaman " \
+            "-fstrip " \
+            "-freference-trace " \
+            "-target x86_64-windows-gnu " \
+            "-ftime-report "
         if release:
             build_cmd += "-O ReleaseFast "
         
         build_cmd += "assets/app.rc"
 
-        print("building with: " + build_cmd)
+        print("Building with command: " + build_cmd)
         
-        # Execute build command
-        os.system(build_cmd)
+        # Execute build command and capture output
+        result = os.system(build_cmd)
+        if result != 0:
+            print(f"Build failed with exit code: {result}")
+            return 1
+
+        # Verify the executable was created
+        if not os.path.exists("install-popaman.exe"):
+            print("Error: Build completed but executable not found")
+            return 1
+            
+        # Get and print file size as sanity check
+        size = os.path.getsize("install-popaman.exe")
+        print(f"Build successful. Executable size: {size:,} bytes")
         
         # Clean up object files
         if os.path.exists("install-popaman.exe.obj"):

@@ -320,8 +320,8 @@ def test_package_installation_from_7z():
     print("Running installation command...")
     try:
         popaman_exe = get_popaman_exe()
-        # Use absolute path for test_package
         test_pkg_path = str(Path('test/test_package.7z').absolute())
+        # Send all inputs at once with newlines
         inputs = b'1\ntest-hello-7z\nthis is optional\n'
         process = run_command(
             f'{popaman_exe} install ' + test_pkg_path,
@@ -331,6 +331,13 @@ def test_package_installation_from_7z():
     except Exception as e:
         print(f"Installation failed: {e}")
         raise
+
+    print("Verifying installation...")
+    with open('popaman/lib/packages.json') as f:
+        packages = json.load(f)
+        assert any(p['keyword'] == 'test-hello-7z' for p in packages['package']), \
+            "Package not found in packages.json"
+    print("Verification complete")
 
 def test_package_installation_from_url_7z():
     print("\nTesting package installation...")  
