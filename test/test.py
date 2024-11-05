@@ -66,7 +66,7 @@ def get_packages_json():
     """Get the path to the packages.json file."""
     return find_popaman_dir() / 'lib' / 'packages.json'
 
-def run_command_capture_output(cmd):
+async def run_command_capture_output(cmd):
     print(f"Debug - Command: {cmd}")
     
     if isinstance(cmd, str):
@@ -90,7 +90,7 @@ def run_command_capture_output(cmd):
     
     return stdout, stderr
 
-def run_command(cmd, input_text=None):
+async def run_command(cmd, input_text=None):
     print(f"Debug - Command: {cmd}")
     print(f"Debug - Input text: {repr(input_text)}")
     
@@ -130,31 +130,29 @@ def run_command(cmd, input_text=None):
     
     return process
 
-def setup():
+async def setup():
     print("Building project...")
-    process = run_command('python build.py', ''.encode('utf-8'))
+    process = await run_command('python build.py', ''.encode('utf-8'))
     if process.returncode != 0:
         raise RuntimeError("Build failed")
     
-    # Add delay after build
-    time.sleep(1)  # Give filesystem time to settle
+    time.sleep(1)
     
-    process = run_command('install-popaman.exe -f', input_text='y\n'.encode('utf-8'))
+    process = await run_command('install-popaman.exe -f', input_text='y\n'.encode('utf-8'))
     if process.returncode != 0:
         raise RuntimeError("Build failed")
     
-    # Add delay after installation
-    time.sleep(1)  # Give filesystem time to settle
+    time.sleep(1)
     
     test_pkg = Path('test/test_package')
     return test_pkg
 
-def test_package_running():
+async def test_package_running():
     print("\nTesting package execution...")
     try:
         popaman_exe = get_popaman_exe()
         # Test the installed package
-        process = run_command(f'{popaman_exe} test-hello')
+        process = await run_command(f'{popaman_exe} test-hello')
         stdout, stderr = process.communicate()
         print("=== Debug Output ===")
         print(f"Return code: {process.returncode}")
@@ -168,31 +166,31 @@ def test_package_running():
             "Package 'test-hello' did not output 'Hello, World!'"
         
         # Test the linked package
-        process = run_command(f'{popaman_exe} test-hello-link')
+        process = await run_command(f'{popaman_exe} test-hello-link')
         stdout, stderr = process.communicate()
         assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
             "Package 'test-hello-link' did not output 'Hello, World!'"
         
         # Test the exe package
-        process = run_command(f'{popaman_exe} test-hello-exe')
+        process = await run_command(f'{popaman_exe} test-hello-exe')
         stdout, stderr = process.communicate()
         assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
             "Package 'test-hello-exe' did not output 'Hello, World!'"
         
         # Test the url exe package
-        process = run_command(f'{popaman_exe} test-hello-url-exe')
+        process = await run_command(f'{popaman_exe} test-hello-url-exe')
         stdout, stderr = process.communicate()
         assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
             "Package 'test-hello-url-exe' did not output 'Hello, World!'"
         
         # Test the 7z package
-        process = run_command(f'{popaman_exe} test-hello-7z')
+        process = await run_command(f'{popaman_exe} test-hello-7z')
         stdout, stderr = process.communicate()
         assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
             "Package 'test-hello-7z' did not output 'Hello, World!'"
         
         # Test the url 7z package
-        process = run_command(f'{popaman_exe} test-hello-url-7z')
+        process = await run_command(f'{popaman_exe} test-hello-url-7z')
         stdout, stderr = process.communicate()
         assert b'Hello, World!' in stdout or b'Hello, World!' in stderr, \
             "Package 'test-hello-url-7z' did not output 'Hello, World!'"
@@ -202,15 +200,13 @@ def test_package_running():
         print(f"Package execution failed: {e}")
         raise
 
-def test_package_installation_from_dir():
+async def test_package_installation_from_dir():
     print("\nTesting package installation...")
-    print("Running installation command...")
     try:
         popaman_exe = get_popaman_exe()
-        # Use absolute path for test_package
         test_pkg_path = str(Path('test/test_package').absolute())
         inputs = b'1\ntest-hello\nthis is optional\n'
-        process = run_command(
+        process = await run_command(
             f'{popaman_exe} install ' + test_pkg_path,
             input_text=inputs
         )
@@ -227,15 +223,13 @@ def test_package_installation_from_dir():
             "Package not found in packages.json"
     print("Verification complete")
 
-def test_package_linking():
+async def test_package_linking():
     print("\nTesting package installation...")
-    print("Running installation command...")
     try:
         popaman_exe = get_popaman_exe()
-        # Use absolute path for test_package
         test_pkg_path = str(Path('test/test_package').absolute())
         inputs = b'1\ntest-hello-link\nthis is optional\n'
-        process = run_command(
+        process = await run_command(
             f'{popaman_exe} link ' + test_pkg_path,
             input_text=inputs
         )
@@ -252,14 +246,14 @@ def test_package_linking():
             "Package not found in packages.json"
     print("Verification complete")
 
-def test_package_removal():
+async def test_package_removal():
     print("\nTesting package removal...")
     popaman_exe = get_popaman_exe()
     
     # Add delays between removals
     for pkg in ['test-hello', 'test-hello-link', 'test-hello-exe', 
                 'test-hello-url-exe', 'test-hello-7z', 'test-hello-url-7z']:
-        process = run_command(f'{popaman_exe} remove {pkg}')
+        process = await run_command(f'{popaman_exe} remove {pkg}')
         time.sleep(0.5)  # Give filesystem time between removals
     
     # Verify package is removed from packages.json
@@ -268,15 +262,13 @@ def test_package_removal():
         assert not any(p['keyword'] == 'test-hello' or p['keyword'] == 'test_package-link' or p['keyword'] == 'test_package-exe' or p['keyword'] == 'test_package-url-exe' or p['keyword'] == 'test_package-7z' or p['keyword'] == 'test_package-url-7z' for p in packages['package']), \
             "Package still exists in packages.json"
 
-def test_package_installation_from_exe():
+async def test_package_installation_from_exe():
     print("\nTesting package installation...")
-    print("Running installation command...")
     try:
         popaman_exe = get_popaman_exe()
-        # Use absolute path for test_package
         test_pkg_path = str(Path('test/test_package/hello.exe').absolute())
         inputs = b'1\ntest-hello-exe\nthis is optional\n'
-        process = run_command(
+        process = await run_command(
             f'{popaman_exe} install ' + test_pkg_path,
             input_text=inputs
         )
@@ -292,15 +284,13 @@ def test_package_installation_from_exe():
             "Package not found in packages.json"
     print("Verification complete")
 
-def test_package_installation_from_url_exe():
+async def test_package_installation_from_url_exe():
     print("\nTesting package installation...")
-    print("Running installation command...")
     try:
         popaman_exe = get_popaman_exe()
-        # Use absolute path for test_package
         test_pkg_path = "https://raw.githubusercontent.com/mirror-shades/popaman/master/test/test_package/hello.exe"
         inputs = b'1\ntest-hello-url-exe\nthis is optional\n'
-        process = run_command(
+        process = await run_command(
             f'{popaman_exe} install ' + test_pkg_path,
             input_text=inputs
         )
@@ -317,15 +307,14 @@ def test_package_installation_from_url_exe():
             "Package not found in packages.json"
     print("Verification complete")
 
-def test_package_installation_from_7z():
+async def test_package_installation_from_7z():
     print("\nTesting package installation...")
-    print("Running installation command...")
     try:
         popaman_exe = get_popaman_exe()
         test_pkg_path = str(Path('test/test_package.7z').absolute())
         # Send all inputs at once with newlines
         inputs = b'1\ntest-hello-7z\nthis is optional\n'
-        process = run_command(
+        process = await run_command(
             f'{popaman_exe} install ' + test_pkg_path,
             input_text=inputs
         )
@@ -341,15 +330,13 @@ def test_package_installation_from_7z():
             "Package not found in packages.json"
     print("Verification complete")
 
-def test_package_installation_from_url_7z():
+async def test_package_installation_from_url_7z():
     print("\nTesting package installation...")  
-    print("Running installation command...")
     try:
         popaman_exe = get_popaman_exe()
-        # Use absolute path for test_package
         test_pkg_path = "https://raw.githubusercontent.com/mirror-shades/popaman/master/test/test_package.7z"
         inputs = b'1\ntest-hello-url-7z\nthis is optional\n'
-        process = run_command(
+        process = await run_command(
             f'{popaman_exe} install ' + test_pkg_path,
             input_text=inputs
         )
@@ -358,15 +345,14 @@ def test_package_installation_from_url_7z():
         print(f"Installation failed: {e}")
         raise
 
-def main():
-    # Initialize our test tracker and set up environment
+async def main():
     tracker = TestTracker()
-    setup()
+    await setup()
     
     try:
         # Test 1: Directory Package
         try:
-            test_package_installation_from_dir()
+            await test_package_installation_from_dir()
             tracker.cases['dir'].install = True
         except Exception as e:
             tracker.cases['dir'].install = False
@@ -374,7 +360,7 @@ def main():
 
         # Test 2: Linked Package
         try:
-            test_package_linking()
+            await test_package_linking()
             tracker.cases['link'].install = True
         except Exception as e:
             tracker.cases['link'].install = False
@@ -382,7 +368,7 @@ def main():
 
         # Test 3: Executable Package
         try:
-            test_package_installation_from_exe()
+            await test_package_installation_from_exe()
             tracker.cases['exe'].install = True
         except Exception as e:
             tracker.cases['exe'].install = False
@@ -390,7 +376,7 @@ def main():
 
         # Test 4: URL Executable Package
         try:
-            test_package_installation_from_url_exe()
+            await test_package_installation_from_url_exe()
             tracker.cases['url_exe'].install = True
         except Exception as e:
             tracker.cases['url_exe'].install = False
@@ -398,7 +384,7 @@ def main():
 
         # Test 5: 7z Archive Package
         try:
-            test_package_installation_from_7z()
+            await test_package_installation_from_7z()
             tracker.cases['7z'].install = True
         except Exception as e:
             tracker.cases['7z'].install = False
@@ -406,7 +392,7 @@ def main():
 
         # Test 6: URL 7z Archive Package
         try:
-            test_package_installation_from_url_7z()
+            await test_package_installation_from_url_7z()
             tracker.cases['url_7z'].install = True
         except Exception as e:
             tracker.cases['url_7z'].install = False
@@ -414,7 +400,7 @@ def main():
 
         # Test all package execution
         try:
-            test_package_running()
+            await test_package_running()
             # If we get here, all packages ran successfully
             for case in tracker.cases.values():
                 case.run = True
@@ -427,7 +413,7 @@ def main():
 
         # Test package removal
         try:
-            test_package_removal()
+            await test_package_removal()
             # If we get here, all packages were removed successfully
             for case in tracker.cases.values():
                 case.remove = True
@@ -455,4 +441,5 @@ def main():
             sys.exit(0)  # Return success exit code
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
