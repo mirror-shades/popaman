@@ -236,5 +236,6 @@ Feel free to explore, contribute, and customize popaman to fit your portable app
 - [x] add support for installing binaries from URLS
 - [x] add 7zip dependency on install
 
-- [ ] add support for installing from compressed files
+- [ ] fix bug with relative paths
+- [ ] add native support for installing from compressed files
 - [ ] add edge cases and negative tests to test script
