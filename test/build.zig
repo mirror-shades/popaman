@@ -12,4 +12,8 @@ pub fn build(b: *std.Build) void {
         .dest_dir = .{ .override = .prefix },
     });
     b.getInstallStep().dependOn(&install_artifact.step);
+
+    // Add test step
+    const test_step = b.step("test", "Run the test package");
+    test_step.dependOn(&install_artifact.step);
 }

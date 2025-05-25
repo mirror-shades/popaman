@@ -101,11 +101,26 @@ async def install_popaman():
     time.sleep(1)
     if returncode != 0:
         raise RuntimeError(f"Installation failed: {stderr}")
+    
+async def build_test_package():
+    # Store the original directory
+    original_dir = os.getcwd()
+    try:
+        # Change to test directory
+        os.chdir('test')
+        returncode, stdout, stderr = await run_command('zig build test', ''.encode('utf-8'))
+        time.sleep(1)
+        if returncode != 0:
+            raise RuntimeError(f"Build failed: {stderr}")
+    finally:
+        # Always return to the original directory
+        os.chdir(original_dir)
 
 async def main():
     tracker = TestTracker()
     await build_installer()
     await install_popaman()
+    await build_test_package()
 
 
 if __name__ == "__main__":
