@@ -3,7 +3,7 @@ import shutil
 import time
 import asyncio
 from pathlib import Path
-
+import sys
 
 class TestCase:
     def __init__(self, name):
@@ -155,7 +155,102 @@ async def create_test_archives():
             if returncode != 0:
                 raise RuntimeError(f"Failed to create {format_name} archive: {stderr}")
             
-            print(f"Created {format_name} archive at {archive_path}")
+            print(f"Created {format_name} archive at {archive_path}")\
+            
+async def test_package_installation_from_dir():
+    returncode, stdout, stderr = await run_command('popaman install test-package', ''.encode('utf-8'))
+    if returncode != 0:
+        raise RuntimeError(f"Installation failed: {stderr}")
+
+async def test_installation(tracker):
+    # Test 1: Directory Package
+    try:
+        await test_package_installation_from_dir()
+        tracker.cases['dir'].install = True
+    except Exception as e:
+        tracker.cases['dir'].install = False
+        print(f"Directory installation failed: {e}")
+
+    # # Test 2: Linked Package
+    # try:
+    #     await test_package_linking()
+    #     tracker.cases['link'].install = True
+    # except Exception as e:
+    #     tracker.cases['link'].install = False
+    #     print(f"Link installation failed: {e}")
+
+    # # Test 3: Executable Package
+    # try:
+    #     await test_package_installation_from_exe()
+    #     tracker.cases['exe'].install = True
+    # except Exception as e:
+    #     tracker.cases['exe'].install = False
+    #     print(f"Executable installation failed: {e}")
+
+    # # Test 4: URL Executable Package
+    # try:
+    #     await test_package_installation_from_url_exe()
+    #     tracker.cases['url_exe'].install = True
+    # except Exception as e:
+    #     tracker.cases['url_exe'].install = False
+    #     print(f"URL executable installation failed: {e}")
+
+    # # Test 5: 7z Archive Package
+    # try:
+    #     await test_package_installation_from_7z()
+    #     tracker.cases['7z'].install = True
+    # except Exception as e:
+    #     tracker.cases['7z'].install = False
+    #     print(f"7z archive installation failed: {e}")
+
+    # # Test 6: URL 7z Archive Package
+    # try:
+    #     await test_package_installation_from_url_7z()
+    #     tracker.cases['url_7z'].install = True
+    # except Exception as e:
+    #     tracker.cases['url_7z'].install = False
+    #     print(f"URL 7z archive installation failed: {e}")
+
+    # # Test all package execution
+    # try:
+    #     await test_package_running()
+    #     # If we get here, all packages ran successfully
+    #     for case in tracker.cases.values():
+    #         case.run = True
+    # except Exception as e:
+    #     # If any package fails to run, mark all as failed
+    #     # (since we can't easily tell which one failed)
+    #     for case in tracker.cases.values():
+    #         case.run = False
+    #     print(f"Package execution failed: {e}")
+
+    # # Test package removal
+    # try:
+    #     await test_package_removal()
+    #     # If we get here, all packages were removed successfully
+    #     for case in tracker.cases.values():
+    #         case.remove = True
+    # except Exception as e:
+    #     # If any package fails to remove, mark all as failed
+    #     for case in tracker.cases.values():
+    #         case.remove = False
+    #     print(f"Package removal failed: {e}")
+
+    # Always show the test report, even if something failed
+    tracker.report()
+    
+    # Check if any tests failed
+    failed_tests = any(
+        any(val is False for val in [case.install, case.run, case.remove])
+        for case in tracker.cases.values()
+    )
+    
+    if failed_tests:
+        print("\nSome tests failed - check the report above for details")
+        sys.exit(1)  # Return failure exit code
+    else:
+        print("\nAll tests completed successfully! 🎉")
+        sys.exit(0)  # Return success exit code
 
 async def main():
     tracker = TestTracker()
@@ -184,7 +279,15 @@ async def main():
         await create_test_archives()
     except Exception as e:
         tracker.cases['dir'].install = False
+        print(f"Error: {e}")\
+    
+    print("Testing installation...")
+    try:
+        await test_installation(tracker)
+    except Exception as e:
+        tracker.cases['dir'].install = False
         print(f"Error: {e}")
+
 
 if __name__ == "__main__":
     import asyncio
