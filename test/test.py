@@ -78,12 +78,24 @@ async def build_installer():
         raise RuntimeError(f"Build failed: {stderr}")
 
 async def install_popaman():
-    install_path = 'C:\\dev\\zig\\popaman'
-    if os.path.exists(os.path.join(install_path, 'popaman')):
-        shutil.rmtree(os.path.join(install_path, 'popaman'))
+    install_path = Path.cwd() # Use Path.cwd() for platform-independence
+    popaman_dir = install_path / 'popaman'
+    if popaman_dir.exists():
+        shutil.rmtree(popaman_dir)
+    
+    executable_name = 'install-popaman'
+    if os.name == 'nt': # Add .exe for windows
+        executable_name += '.exe'
+
+    # Construct the command using os.path.join for platform compatibility
+    command = [
+        str(Path('zig-out') / 'bin' / executable_name),
+        '-f',
+        str(install_path)
+    ]
     
     returncode, stdout, stderr = await run_command(
-        'zig-out/bin/install-popaman.exe -f C:\\dev\\zig\\popaman',
+        ' '.join(command), # Join the command list into a string
         input_text='y\n'.encode('utf-8')
     )
     time.sleep(1)
