@@ -123,23 +123,14 @@ fn create_popaman_directory(arg_root_dir: []const u8) !void {
     // Create packages.json
     const packages_path = try std.fs.path.join(allocator, &[_][]const u8{ lib_path, "packages.json" });
     std.debug.print("Creating packages.json: {s}\n", .{packages_path});
-    const file = std.fs.createFileAbsolute(packages_path, .{ .exclusive = true }) catch |err| {
-        if (err != error.PathAlreadyExists) {
-            std.debug.print("Error creating packages.json: {any}\n", .{err});
-            return err;
-        } else {
-            std.debug.print("packages.json already exists\n", .{});
-            return;
-        }
-    };
-    defer file.close();
 
-    // Write initial JSON structure
+    // Create or truncate the file and write initial JSON structure
+    const file = try std.fs.cwd().createFile(packages_path, .{ .truncate = true });
+    defer file.close();
     try file.writeAll(
         \\{
         \\  "package": []
         \\}
-        \\
     );
 
     // Copy executable if needed
@@ -440,31 +431,32 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package, install_dir:
 
     std.debug.print("Writing package info to: {s}\n", .{packages_path});
 
-    // Try to open the file, create it if it doesn't exist
-    const file = std.fs.cwd().createFile(packages_path, .{ .read = true }) catch |err| switch (err) {
-        error.PathAlreadyExists => try std.fs.cwd().openFile(packages_path, .{ .mode = .read_write }),
-        else => |e| {
-            std.debug.print("Error accessing packages.json at {s}: {any}\n", .{ packages_path, e });
-            return e;
-        },
-    };
+    // Open file in read-write mode
+    const file = try std.fs.cwd().openFile(packages_path, .{ .mode = .read_write });
     defer file.close();
 
-    // Read existing content or use empty string
-    const content = blk: {
-        if (file.readToEndAlloc(allocator, std.math.maxInt(usize))) |data| {
-            break :blk data;
-        } else |err| {
-            if (err == error.EndOfStream) {
-                break :blk try allocator.dupe(u8, "");
-            }
+    // Read existing content
+    var content: []u8 = undefined;
+    if (file.readToEndAlloc(allocator, std.math.maxInt(usize))) |data| {
+        content = data;
+    } else |err| {
+        if (err == error.EndOfStream) {
+            // If file is empty, write initial JSON structure
+            try file.writeAll(
+                \\{
+                \\  "package": []
+                \\}
+            );
+            try file.seekTo(0);
+            content = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+        } else {
             return err;
         }
-    };
+    }
     defer allocator.free(content);
 
     // Parse existing JSON
-    const parsed = try std.json.parseFromSlice(
+    var parsed = try std.json.parseFromSlice(
         PackageFile,
         allocator,
         content,
@@ -476,7 +468,7 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package, install_dir:
     var new_packages = try allocator.alloc(Package, parsed.value.package.len + 1);
     defer allocator.free(new_packages);
 
-    // Deep copy existing packages
+    // Copy existing packages
     for (parsed.value.package, 0..) |src_package, i| {
         new_packages[i] = Package{
             .name = try allocator.dupe(u8, src_package.name),
@@ -487,7 +479,7 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package, install_dir:
         };
     }
 
-    // Deep copy new package
+    // Add new package
     new_packages[new_packages.len - 1] = Package{
         .name = try allocator.dupe(u8, package.name),
         .path = try allocator.dupe(u8, package.path),
