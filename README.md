@@ -4,18 +4,21 @@
 
 popaman is a lightweight package manager for managing portable applications. It allows you to install, manage, and run portable apps from a centralized location with optional global access. It focuses on simplicity and ease of use, allowing you to install and run portable applications with a few simple commands.
 
+
 ## Features
 
-- Install and manage portable applications from various sources:
+- Install and manage executables from various sources:
   - Local directories
   - Executable files
-  - Compressed archives (uses 7z for extraction currently)
+  - Compressed archives (uses 7zr for extraction currently)
   - URLs pointing to executables or compressed files
 - Global or local package installation
 - Simple command-line interface
 - JSON-based package management
 - Automatic PATH management
 - Support for linking external packages
+- Full windows support
+- Linux support currently being implemented
 
 ## Technical Highlights
 
@@ -27,7 +30,7 @@ popaman is a lightweight package manager for managing portable applications. It 
 ## Design Philosophy
 
 - Self-contained and portable by design
-- Minimal dependencies for reliability
+- Minimal dependencies for reliability (currently relies on 7zip)
 - Flexible installation options (global/local)
 - Simple but powerful command-line interface
 - Extensible to support various package formats and sources
