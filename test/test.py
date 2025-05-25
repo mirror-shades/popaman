@@ -108,7 +108,7 @@ async def build_test_package():
     try:
         # Change to test directory
         os.chdir('test')
-        returncode, stdout, stderr = await run_command('zig build test', ''.encode('utf-8'))
+        returncode, stdout, stderr = await run_command('zig build', ''.encode('utf-8'))
         time.sleep(1)
         if returncode != 0:
             raise RuntimeError(f"Build failed: {stderr}")
@@ -116,12 +116,75 @@ async def build_test_package():
         # Always return to the original directory
         os.chdir(original_dir)
 
+async def create_test_archives():
+    # Get the test package path
+    test_package_name = "test-package"
+    if os.name == 'nt':
+        test_package_name += ".exe"
+    
+    # Define paths
+    test_package_path = str(Path("test") / "zig-out" / test_package_name)
+    archives_dir = Path("test") / "archives"
+    
+    # Create archives directory if it doesn't exist
+    os.makedirs(archives_dir, exist_ok=True)
+    
+    # Get 7zr path from popaman installation
+    seven_zip_path = str(Path("popaman") / "lib" / "7zr" / ("7zr.exe" if os.name == 'nt' else "7zr"))
+    
+    # Create different archive formats - only use formats supported by 7zr
+    archive_formats = [
+        ("7z", "7z"),
+        ("zip", "zip"),
+    ]
+    
+    for format_name, extension in archive_formats:
+        archive_path = str(archives_dir / f"test-package.{extension}")
+        
+        # Remove existing archive if it exists
+        if os.path.exists(archive_path):
+            os.remove(archive_path)
+        
+        # Create archive command
+        if format_name in ["7z", "zip"]:
+            # Direct 7z/zip creation
+            command = f"{seven_zip_path} a {archive_path} {test_package_path}"
+            
+            # Execute the archive command
+            returncode, stdout, stderr = await run_command(command, None)
+            if returncode != 0:
+                raise RuntimeError(f"Failed to create {format_name} archive: {stderr}")
+            
+            print(f"Created {format_name} archive at {archive_path}")
+
 async def main():
     tracker = TestTracker()
-    await build_installer()
-    await install_popaman()
-    await build_test_package()
+    print("Testing Popaman...")
+    print("Building test files...")
+    try:
+        await build_installer()
+    except Exception as e:
+        tracker.cases['dir'].install = False
+        print(f"Error: {e}")
 
+    try:
+        await install_popaman()
+    except Exception as e:
+        tracker.cases['dir'].install = False
+        print(f"Error: {e}")
+
+    try:
+        await build_test_package()
+    except Exception as e:
+        tracker.cases['dir'].install = False
+        print(f"Error: {e}")
+
+    print("Creating test archives...")
+    try:
+        await create_test_archives()
+    except Exception as e:
+        tracker.cases['dir'].install = False
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     import asyncio
