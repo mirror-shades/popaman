@@ -1,18 +1,18 @@
-pub fn build(b: *std.Build) void {
-    // Standard target options
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+const std = @import("std");
 
-    // Create the main executable
+pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
-        .name = "hello",
-        .root_source_file = .{ .src_path = .{
-            .owner = b,
-            .sub_path = "test_package.zig",
-        } },
-        .target = target,
-        .optimize = optimize,
+        .name = "test-package",
+        .root_source_file = b.path("test/test_package.zig"),
+        .target = b.graph.host,
+        .optimize = b.standardOptimizeOption(.{}),
     });
 
-    b.installArtifact(exe);
+    // Direct installation to prefix root
+    const install_step = b.addInstallArtifact(exe, .{
+        .dest_dir = .{ .override = .prefix },
+        .dest_filename = "test-package", // Optional filename control
+    });
+
+    b.getInstallStep().dependOn(&install_step.step);
 }

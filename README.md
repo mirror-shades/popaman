@@ -2,14 +2,14 @@
 
 ## (Po)rtable (Pa)ckage (Man)ager
 
-popaman is a lightweight package manager for managing portable Windows applications. It allows you to install, manage, and run portable apps from a centralized location with optional global access. It focuses on simplicity and ease of use, allowing you to install and run portable applications with a few simple commands.
+popaman is a lightweight package manager for managing portable applications. It allows you to install, manage, and run portable apps from a centralized location with optional global access. It focuses on simplicity and ease of use, allowing you to install and run portable applications with a few simple commands.
 
 ## Features
 
 - Install and manage portable applications from various sources:
   - Local directories
   - Executable files
-  - Compressed archives (only `.7z` for now)
+  - Compressed archives (uses 7z for extraction currently)
   - URLs pointing to executables or compressed files
 - Global or local package installation
 - Simple command-line interface
@@ -23,7 +23,6 @@ popaman is a lightweight package manager for managing portable Windows applicati
 - Memory-safe implementation using Arena allocators
 - Robust error handling and user feedback
 - Extensible JSON-based package configuration
-- Utilizes `7zr` for extracting compressed archives
 
 ## Design Philosophy
 
@@ -35,13 +34,7 @@ popaman is a lightweight package manager for managing portable Windows applicati
 
 ## Building and Installing popaman
 
-To build from source, you will need Python for the build script and Zig 0.14 for compilation. Run the `build.py` script to compile the installer:
-
-```
-python build.py
-```
-
-The popaman installation executable will create an installation directory in the current working directory. It also accepts optional arguments to specify the installation directory, force overwrite an existing installation, or skip adding popaman to the PATH.
+To build from source, Zig 0.14 for compilation. Run the `zig build` to compile the installer. The popaman installation executable will try and create an installation directory in the current working directory. It also accepts optional arguments to specify the installation directory, force overwrite an existing installation, or skip adding popaman to the PATH.
 
 ```
 ./install-popaman.exe [directory] [-f] [-no-path]
@@ -180,7 +173,7 @@ The `packages.json` file defines how popaman locates and manages packages. Below
 ```json
 {
   "name": "directory_name", // Name of the package directory in lib/
-  "path": "path/to/executable.exe", // Path to the executable from the lib/directory_name directory
+  "path": "path/to/executable", // Path to the executable from the lib/directory_name directory
   "keyword": "keyword_to_use", // Command keyword to invoke the package
   "global": true, // Whether package is globally available
   "description": "optional description" // Description of the package
