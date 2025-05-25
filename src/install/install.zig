@@ -450,13 +450,17 @@ fn add_package_info(allocator: std.mem.Allocator, package: Package, install_dir:
     };
     defer file.close();
 
-    // Read existing content or start with empty package list
-    var content: []const u8 = undefined;
-    if ((try file.getEndPos()) > 0) {
-        content = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
-    } else {
-        content = try allocator.dupe(u8, "{ \"package\": [] }");
-    }
+    // Read existing content or use empty string
+    const content = blk: {
+        if (file.readToEndAlloc(allocator, std.math.maxInt(usize))) |data| {
+            break :blk data;
+        } else |err| {
+            if (err == error.EndOfStream) {
+                break :blk try allocator.dupe(u8, "");
+            }
+            return err;
+        }
+    };
     defer allocator.free(content);
 
     // Parse existing JSON
@@ -722,29 +726,37 @@ pub fn install_popaman() !void {
                 };
 
                 // Try to open or create the RC file
-                const rc_file = std.fs.createFileAbsolute(shell_rc, .{ .read = true, .truncate = false }) catch |err| switch (err) {
-                    error.PathAlreadyExists => try std.fs.openFileAbsolute(shell_rc, .{ .mode = .read_write }),
-                    else => return err,
-                };
+                const rc_file = try std.fs.openFileAbsolute(shell_rc, .{ .mode = .read_write });
                 defer rc_file.close();
 
-                // Read existing content or start with empty string
-                var content: []const u8 = "";
-                if (rc_file.getEndPos() catch 0 > 0) {
-                    content = try rc_file.readToEndAlloc(allocator, std.math.maxInt(usize));
-                } else {
-                    content = try allocator.dupe(u8, "");
-                }
+                // Read existing content or use empty string
+                const content = blk: {
+                    if (rc_file.readToEndAlloc(allocator, std.math.maxInt(usize))) |data| {
+                        break :blk data;
+                    } else |err| {
+                        if (err == error.EndOfStream) {
+                            break :blk try allocator.dupe(u8, "");
+                        }
+                        return err;
+                    }
+                };
                 defer allocator.free(content);
 
-                const path_line = try std.fmt.allocPrint(allocator, "\nexport PATH=\"{s}:$PATH\"\n", .{bin_path});
+                // Create the PATH line based on shell type
+                const path_line = if (std.mem.endsWith(u8, shell_rc, "config.fish"))
+                    try std.fmt.allocPrint(allocator, "\nset -gx PATH \"{s}\" $PATH\n", .{bin_path})
+                else
+                    try std.fmt.allocPrint(allocator, "\nexport PATH=\"{s}:$PATH\"\n", .{bin_path});
                 defer allocator.free(path_line);
 
+                // Only add the PATH if it's not already there
                 if (std.mem.indexOf(u8, content, path_line) == null) {
                     try rc_file.seekFromEnd(0);
                     try rc_file.writeAll(path_line);
                     std.debug.print("Added popaman bin directory to PATH in {s}\n", .{shell_rc});
                     std.debug.print("Please restart your shell or run 'source {s}' to update your PATH\n", .{shell_rc});
+                } else {
+                    std.debug.print("popaman bin directory already in PATH\n", .{});
                 }
             },
             else => {},

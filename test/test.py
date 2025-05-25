@@ -2,6 +2,7 @@ import subprocess
 import json
 import sys
 import time
+import os
 from pathlib import Path
 
 class TestCase:
@@ -53,14 +54,18 @@ def find_popaman_dir():
     current_dir = Path(__file__).parent
     while current_dir != current_dir.parent:  # Stop at root
         popaman_dir = current_dir / 'popaman'
-        if popaman_dir.exists() and (popaman_dir / 'bin' / 'popaman.exe').exists():
+        bin_dir = popaman_dir / 'bin'
+        exe_name = 'popaman.exe' if os.name == 'nt' else 'popaman'
+        if popaman_dir.exists() and (bin_dir / exe_name).exists():
             return popaman_dir
         current_dir = current_dir.parent
     raise RuntimeError("Could not find popaman installation directory")
 
 def get_popaman_exe():
     """Get the path to the popaman executable."""
-    return str(find_popaman_dir() / 'bin' / 'popaman.exe')
+    exe_name = 'popaman.exe' if os.name == 'nt' else 'popaman'
+    popaman_dir = find_popaman_dir()
+    return str(popaman_dir / 'bin' / exe_name)
 
 def get_packages_json():
     """Get the path to the packages.json file."""
@@ -132,13 +137,18 @@ async def run_command(cmd, input_text=None):
 
 async def setup():
     print("Building project...")
-    process = await run_command('python build.py', ''.encode('utf-8'))
+    process = await run_command('zig build', ''.encode('utf-8'))
     if process.returncode != 0:
         raise RuntimeError("Build failed")
     
     time.sleep(1)
+    popaman_exe = get_popaman_exe()
     
-    process = await run_command('install-popaman.exe -f', input_text='y\n'.encode('utf-8'))
+    # Make sure the executable has the right permissions
+    if os.name != 'nt':  # Not needed on Windows
+        os.chmod(popaman_exe, 0o755)
+    
+    process = await run_command(f'{popaman_exe} -f', input_text='y\n'.encode('utf-8'))
     if process.returncode != 0:
         raise RuntimeError("Build failed")
     
@@ -147,10 +157,33 @@ async def setup():
     test_pkg = Path('test/test_package')
     return test_pkg
 
+async def ensure_executable_permissions(package_name):
+    """Ensure the package executable has the right permissions."""
+    if os.name == 'nt':  # Not needed on Windows
+        return
+        
+    popaman_dir = find_popaman_dir()
+    package_dir = popaman_dir / 'lib' / package_name
+    if not package_dir.exists():
+        return
+        
+    # Walk through the package directory and make all files executable
+    for root, _, files in os.walk(package_dir):
+        for file in files:
+            file_path = Path(root) / file
+            if not file_path.suffix:  # No extension, likely an executable
+                os.chmod(file_path, 0o755)
+
 async def test_package_running():
     print("\nTesting package execution...")
     try:
         popaman_exe = get_popaman_exe()
+        
+        # Ensure all package executables have the right permissions
+        for pkg in ['test-hello', 'test-hello-link', 'test-hello-exe', 
+                    'test-hello-url-exe', 'test-hello-7z', 'test-hello-url-7z']:
+            await ensure_executable_permissions(pkg)
+        
         # Test the installed package
         process = await run_command(f'{popaman_exe} test-hello')
         stdout, stderr = process.communicate()
@@ -217,7 +250,8 @@ async def test_package_installation_from_dir():
     
     print("Verifying installation...")
     #Verify package exists in packages.json
-    with open('popaman/lib/packages.json') as f:
+    packages_json = get_packages_json()
+    with open(packages_json) as f:
         packages = json.load(f)
         assert any(p['keyword'] == 'test-hello' for p in packages['package']), \
             "Package not found in packages.json"
@@ -240,7 +274,8 @@ async def test_package_linking():
     
     print("Verifying installation...")
     #Verify package exists in packages.json
-    with open('popaman/lib/packages.json') as f:
+    packages_json = get_packages_json()
+    with open(packages_json) as f:
         packages = json.load(f)
         assert any(p['name'] == 'link@test_package' for p in packages['package']), \
             "Package not found in packages.json"
@@ -257,7 +292,8 @@ async def test_package_removal():
         time.sleep(0.5)  # Give filesystem time between removals
     
     # Verify package is removed from packages.json
-    with open('popaman/lib/packages.json') as f:
+    packages_json = get_packages_json()
+    with open(packages_json) as f:
         packages = json.load(f)
         assert not any(p['keyword'] == 'test-hello' or p['keyword'] == 'test_package-link' or p['keyword'] == 'test_package-exe' or p['keyword'] == 'test_package-url-exe' or p['keyword'] == 'test_package-7z' or p['keyword'] == 'test_package-url-7z' for p in packages['package']), \
             "Package still exists in packages.json"
@@ -278,7 +314,8 @@ async def test_package_installation_from_exe():
         raise
     
     print("Verifying installation...")
-    with open('popaman/lib/packages.json') as f:
+    packages_json = get_packages_json()
+    with open(packages_json) as f:
         packages = json.load(f)
         assert any(p['keyword'] == 'test-hello-exe' for p in packages['package']), \
             "Package not found in packages.json"
@@ -301,7 +338,8 @@ async def test_package_installation_from_url_exe():
     
     print("Verifying installation...")
     #Verify package exists in packages.json
-    with open('popaman/lib/packages.json') as f:
+    packages_json = get_packages_json()
+    with open(packages_json) as f:
         packages = json.load(f)
         assert any(p['keyword'] == 'test-hello-url-exe' for p in packages['package']), \
             "Package not found in packages.json"
@@ -324,7 +362,8 @@ async def test_package_installation_from_7z():
         raise
 
     print("Verifying installation...")
-    with open('popaman/lib/packages.json') as f:
+    packages_json = get_packages_json()
+    with open(packages_json) as f:
         packages = json.load(f)
         assert any(p['keyword'] == 'test-hello-7z' for p in packages['package']), \
             "Package not found in packages.json"
