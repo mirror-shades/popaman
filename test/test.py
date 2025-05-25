@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import json
+import argparse
 
 class AssetTracker:
     def __init__(self):
@@ -91,9 +92,10 @@ class TestTracker:
             'dir': TestCase('Directory Package'),
             'link': TestCase('Linked Package'),
             'exe': TestCase('Executable Package'),
-            'url_exe': TestCase('URL Executable Package'),
+            #'url_exe': TestCase('URL Executable Package'),
             '7z': TestCase('7z Archive Package'),
-            'url_7z': TestCase('URL 7z Archive Package')
+            #'url_7z': TestCase('URL 7z Archive Package'),
+            'zip': TestCase('Zip Archive Package')
         }
     
     def report(self):
@@ -128,10 +130,6 @@ async def run_command(command, input_text=None):
     else:
         args = command
     
-    # Debug output
-    print("Debug - Command:", ' '.join(str(arg) for arg in args))
-    print("Debug - Input text:", input_text)
-    
     try:
         process = await asyncio.create_subprocess_exec(
             *args,
@@ -163,7 +161,7 @@ async def build_installer():
     if returncode != 0:
         raise RuntimeError(f"Build failed: {stderr}")
 
-async def install_popaman(dir_tracker):
+async def install_popaman(ass_tracker):
     install_path = Path.cwd() # Use Path.cwd() for platform-independence
     popaman_dir = install_path / 'popaman'
     if popaman_dir.exists():
@@ -202,14 +200,14 @@ async def install_popaman(dir_tracker):
         if not popaman_exe_path.exists():
             raise RuntimeError(f"Popaman executable not found at {popaman_exe_path}")
             
-        dir_tracker.set_file('popaman_exe', popaman_exe_path)
-        dir_tracker.set_directory('popaman_bin', popaman_dir / 'bin')
+        ass_tracker.set_file('popaman_exe', popaman_exe_path)
+        ass_tracker.set_directory('popaman_bin', popaman_dir / 'bin')
         print(f"Installed at {popaman_dir}")
     except Exception as e:
         print(f"Error during installation: {e}")
         raise
 
-async def build_test_package(dir_tracker):
+async def build_test_package(ass_tracker):
     # Store the original directory
     original_dir = os.getcwd()
     try:
@@ -222,25 +220,26 @@ async def build_test_package(dir_tracker):
         test_package_name = "test-package"
         if os.name == 'nt':
             test_package_name += ".exe"
-        test_package_path = Path('test') / 'zig-out' / test_package_name
-        dir_tracker.set_file('test_package', test_package_path)
-        dir_tracker.set_directory('test_package_dir', Path('test') / 'zig-out')
+        test_package_path = Path('test') / 'zig-out' / 'test-package' 
+        test_package_exe = test_package_path / test_package_name
+        ass_tracker.set_file('test_package', test_package_exe)
+        ass_tracker.set_directory('test_package_dir', test_package_path)
     finally:
         # Always return to the original directory
         os.chdir(original_dir)
 
-async def create_test_archives(dir_tracker):
+async def create_test_archives(ass_tracker):
     # Get the test package path
-    test_package_path = dir_tracker.get_file('test_package')
+    test_package_path = ass_tracker.get_file('test_package')
     if not test_package_path:
         raise RuntimeError("test_package file not set")
 
     # Create archives directory
     archives_dir = Path("test") / "archives"
     archives_dir.mkdir(parents=True, exist_ok=True)
-    dir_tracker.set_directory('archives_dir', archives_dir)
+    ass_tracker.set_directory('archives_dir', archives_dir)
 
-    popaman_exe = dir_tracker.get_file('popaman_exe')
+    popaman_exe = ass_tracker.get_file('popaman_exe')
     if not popaman_exe:
         raise RuntimeError("popaman_exe file not set")
     
@@ -276,17 +275,17 @@ async def create_test_archives(dir_tracker):
             raise RuntimeError(f"Failed to create {format_name} archive: {stderr}")
         
         print(f"Created {format_name} archive at {archive_path}")
-        dir_tracker.set_archive(format_name, archive_path)
+        ass_tracker.set_archive(format_name, archive_path)
 
-async def test_package_installation_from_dir(dir_tracker):
-    popaman_exe = dir_tracker.get_file('popaman_exe')
+async def test_package_installation_from_dir(ass_tracker):
+    popaman_exe = ass_tracker.get_file('popaman_exe')
     if not popaman_exe:
         raise RuntimeError("popaman_exe file not set")
     
     if not popaman_exe.exists():
         raise RuntimeError(f"Popaman executable not found at {popaman_exe}")
     
-    test_package_dir = dir_tracker.get_directory('test_package_dir')
+    test_package_dir = ass_tracker.get_directory('test_package_dir')
     if not test_package_dir:
         raise RuntimeError("test_package_dir directory not set")
     
@@ -317,30 +316,261 @@ async def test_package_installation_from_dir(dir_tracker):
             "Package not found in packages.json"
     print("Verification complete")
 
-async def test_installation(dir_tracker, test_tracker):
+async def test_package_linking(ass_tracker):
+    print("\nTesting package installation...")
+    popaman_exe = ass_tracker.get_file('popaman_exe')
+    if not popaman_exe:
+        raise RuntimeError("popaman_exe file not set")
+    
+    if not popaman_exe.exists():
+        raise RuntimeError(f"Popaman executable not found at {popaman_exe}")
+    
+    test_package_dir = ass_tracker.get_directory('test_package_dir')
+    if not test_package_dir:
+        raise RuntimeError("test_package_dir directory not set")
+    
+    if not test_package_dir.exists():
+        raise RuntimeError(f"Test package directory not found at {test_package_dir}")
+    try:
+        inputs = b'1\ntest-hello-link\nthis is optional\n'
+        # Use str() to ensure proper path formatting
+        command = f'"{str(popaman_exe.absolute())}" link "{str(test_package_dir.absolute())}"'
+        returncode, stdout, stderr = await run_command(
+            command,
+            input_text=inputs
+        )
+        if returncode != 0:
+            raise RuntimeError(f"Installation failed: {stderr}")
+        print("Installation command completed")
+    except Exception as e:
+        print(f"Installation failed: {e}")
+        raise
+    
+    print("Verifying installation...")
+    #Verify package exists in packages.json
+    with open('popaman/lib/packages.json') as f:
+        packages = json.load(f)
+        assert any(p['name'] == 'link@test-package' for p in packages['package']), \
+            "Package not found in packages.json"
+    print("Verification complete")
+
+async def test_package_installation_from_7z(ass_tracker):
+    print("\nTesting package installation...")
+    popaman_exe = ass_tracker.get_file('popaman_exe')
+    if not popaman_exe:
+        raise RuntimeError("popaman_exe file not set")
+    
+    if not popaman_exe.exists():
+        raise RuntimeError(f"Popaman executable not found at {popaman_exe}")
+    
+    test_pkg_path = ass_tracker.get_archive('7z')
+    if not test_pkg_path:
+        raise RuntimeError("7z archive not set")
+    
+    if not test_pkg_path.exists():
+        raise RuntimeError(f"7z archive not found at {test_pkg_path}")
+    
+    try:
+        inputs = b'1\ntest-hello-7z\nthis is optional\n'
+        command = f'"{str(popaman_exe.absolute())}" install "{str(test_pkg_path.absolute())}"'
+        returncode, stdout, stderr = await run_command(
+            command,
+            input_text=inputs
+        )
+        if returncode != 0:
+            raise RuntimeError(f"Installation failed: {stderr}")
+        print("Installation command completed")
+    except Exception as e:
+        print(f"Installation failed: {e}")
+        raise
+    
+    print("Verifying installation...")
+    with open('popaman/lib/packages.json') as f:
+        packages = json.load(f)
+        assert any(p['keyword'] == 'test-hello-7z' for p in packages['package']), \
+            "Package not found in packages.json"
+    print("Verification complete")
+
+async def test_package_installation_from_zip(ass_tracker):
+    print("\nTesting package installation...")
+    popaman_exe = ass_tracker.get_file('popaman_exe')
+    if not popaman_exe:
+        raise RuntimeError("popaman_exe file not set")
+    
+    if not popaman_exe.exists():
+        raise RuntimeError(f"Popaman executable not found at {popaman_exe}")
+    
+    test_pkg_path = ass_tracker.get_archive('zip')
+    if not test_pkg_path:
+        raise RuntimeError("zip archive not set")
+    
+    if not test_pkg_path.exists():
+        raise RuntimeError(f"zip archive not found at {test_pkg_path}")
+    
+    try:
+        inputs = b'1\ntest-hello-zip\nthis is optional\n'
+        command = f'"{str(popaman_exe.absolute())}" install "{str(test_pkg_path.absolute())}"'
+        returncode, stdout, stderr = await run_command(
+            command,
+            input_text=inputs
+        )
+        if returncode != 0:
+            raise RuntimeError(f"Installation failed: {stderr}")
+        print("Installation command completed")
+    except Exception as e:
+        print(f"Installation failed: {e}")
+        raise
+    
+    print("Verifying installation...")
+    with open('popaman/lib/packages.json') as f:
+        packages = json.load(f)
+        assert any(p['keyword'] == 'test-hello-zip' for p in packages['package']), \
+            "Package not found in packages.json"
+    print("Verification complete")
+
+
+
+async def test_package_removal(ass_tracker):
+    print("\nTesting package removal...")
+    popaman_exe = ass_tracker.get_file('popaman_exe')
+    if not popaman_exe:
+        raise RuntimeError("popaman_exe file not set")
+    
+    if not popaman_exe.exists():
+        raise RuntimeError(f"Popaman executable not found at {popaman_exe}")
+    
+    # Add delays between removals
+    for pkg in ['test-hello', 'test-hello-link', 'test-hello-exe', 
+                'test-hello-7z', 'test-hello-zip']: 
+        # Use proper path formatting with quotes for Windows paths
+        command = f'"{str(popaman_exe.absolute())}" remove {pkg}'
+        returncode, stdout, stderr = await run_command(
+            command,
+            input_text=None
+        )
+        if returncode != 0:
+            # Only raise error if it's not a "package not found" error
+            if "Package not found" not in stderr:
+                raise RuntimeError(f"Failed to remove package {pkg}: {stderr}")
+        time.sleep(0.5)  # Give filesystem time between removals
+    
+    # Verify package is removed from packages.json
+    with open('popaman/lib/packages.json') as f:
+        packages = json.load(f)
+        assert not any(p['keyword'] == 'test-hello' or 
+                      p['keyword'] == 'test-hello-link' or 
+                      p['keyword'] == 'test-hello-exe' or 
+                      p['keyword'] == 'test-hello-7z' or 
+                      p['keyword'] == 'test-hello-zip' for p in packages['package']), \
+            "Package still exists in packages.json"
+
+async def test_package_installation_from_exe(ass_tracker):
+    popaman_exe = ass_tracker.get_file('popaman_exe')
+    if not popaman_exe:
+        raise RuntimeError("popaman_exe file not set")
+    
+    if not popaman_exe.exists():
+        raise RuntimeError(f"Popaman executable not found at {popaman_exe}")
+    
+    test_package_exe = ass_tracker.get_file('test_package')
+    if not test_package_exe:
+        raise RuntimeError("test_package file not set")
+    
+    if not test_package_exe.exists():
+        raise RuntimeError(f"Test package executable not found at {test_package_exe}")
+    
+    print("\nTesting package installation...")
+    try:
+        inputs = b'1\ntest-hello-exe\nthis is optional\n'
+        # Use str() to ensure proper path formatting
+        command = f'"{str(popaman_exe.absolute())}" install "{str(test_package_exe.absolute())}"'
+        returncode, stdout, stderr = await run_command(
+            command,
+            input_text=inputs
+        )
+        if returncode != 0:
+            raise RuntimeError(f"Installation failed: {stderr}")
+        print("Installation command completed")
+    except Exception as e:
+        print(f"Installation failed: {e}")
+        raise
+    
+    print("Verifying installation...")
+    # Verify package exists in packages.json
+    with open('popaman/lib/packages.json') as f:
+        packages = json.load(f)
+        assert any(p['keyword'] == 'test-hello' for p in packages['package']), \
+            "Package not found in packages.json"
+    print("Verification complete")
+
+async def test_package_running(ass_tracker):
+    print("\nTesting package execution...")
+    try:
+        popaman_exe = ass_tracker.get_file('popaman_exe')
+        if not popaman_exe:
+            raise RuntimeError("popaman_exe file not set")
+        
+        if not popaman_exe.exists():
+            raise RuntimeError(f"Popaman executable not found at {popaman_exe}")
+        
+        # Test each package type
+        packages = [
+            'test-hello',
+            'test-hello-link',
+            'test-hello-exe',
+            #'test-hello-url-exe',
+            'test-hello-7z',
+            #'test-hello-url-7z',
+            'test-hello-zip'  
+        ]
+        
+        for pkg in packages:
+            # Use proper path formatting with quotes for Windows paths
+            command = f'"{str(popaman_exe.absolute())}" {pkg}'
+            returncode, stdout, stderr = await run_command(
+                command,
+                input_text=None
+            )
+            if returncode != 0:
+                raise RuntimeError(f"Package {pkg} execution failed: {stderr}")
+            
+            # stdout and stderr are already strings, no need to decode
+            if 'Hello, world!' not in stdout and 'Hello, world!' not in stderr:
+                raise RuntimeError(f"Package {pkg} did not output 'Hello, world!'")
+            
+            print(f"Package {pkg} executed successfully")
+        
+        print("All package execution tests passed")
+    except Exception as e:
+        print(f"Package execution failed: {e}")
+        raise
+
+
+
+async def test_installation(ass_tracker, test_tracker):
     # Test 1: Directory Package
     try:
-        await test_package_installation_from_dir(dir_tracker)
+        await test_package_installation_from_dir(ass_tracker)
         test_tracker.cases['dir'].install = True
     except Exception as e:
         test_tracker.cases['dir'].install = False
         print(f"Directory installation failed: {e}")
 
-    # # Test 2: Linked Package
-    # try:
-    #     await test_package_linking()
-    #     tracker.cases['link'].install = True
-    # except Exception as e:
-    #     tracker.cases['link'].install = False
-    #     print(f"Link installation failed: {e}")
+    # Test 2: Linked Package
+    try:
+        await test_package_linking(ass_tracker)
+        test_tracker.cases['link'].install = True
+    except Exception as e:
+        test_tracker.cases['link'].install = False
+        print(f"Link installation failed: {e}")
 
-    # # Test 3: Executable Package
-    # try:
-    #     await test_package_installation_from_exe()
-    #     tracker.cases['exe'].install = True
-    # except Exception as e:
-    #     tracker.cases['exe'].install = False
-    #     print(f"Executable installation failed: {e}")
+    # Test 3: Executable Package
+    try:
+        await test_package_installation_from_exe(ass_tracker)
+        test_tracker.cases['exe'].install = True
+    except Exception as e:
+        test_tracker.cases['exe'].install = False
+        print(f"Executable installation failed: {e}")
 
     # # Test 4: URL Executable Package
     # try:
@@ -350,72 +580,33 @@ async def test_installation(dir_tracker, test_tracker):
     #     tracker.cases['url_exe'].install = False
     #     print(f"URL executable installation failed: {e}")
 
-    # # Test 5: 7z Archive Package
-    # try:
-    #     await test_package_installation_from_7z()
-    #     tracker.cases['7z'].install = True
-    # except Exception as e:
-    #     tracker.cases['7z'].install = False
-    #     print(f"7z archive installation failed: {e}")
+    # Test 5: 7z Archive Package
+    try:
+        await test_package_installation_from_7z(ass_tracker)
+        test_tracker.cases['7z'].install = True
+    except Exception as e:
+        test_tracker.cases['7z'].install = False
+        print(f"7z archive installation failed: {e}")
 
     # # Test 6: URL 7z Archive Package
     # try:
     #     await test_package_installation_from_url_7z()
-    #     tracker.cases['url_7z'].install = True
+    #     test_tracker.cases['url_7z'].install = True
     # except Exception as e:
-    #     tracker.cases['url_7z'].install = False
+    #     test_tracker.cases['url_7z'].install = False
     #     print(f"URL 7z archive installation failed: {e}")
 
-    # # Test all package execution
-    # try:
-    #     await test_package_running()
-    #     # If we get here, all packages ran successfully
-    #     for case in tracker.cases.values():
-    #         case.run = True
-    # except Exception as e:
-    #     # If any package fails to run, mark all as failed
-    #     # (since we can't easily tell which one failed)
-    #     for case in tracker.cases.values():
-    #         case.run = False
-    #     print(f"Package execution failed: {e}")
+    try:
+        await test_package_installation_from_zip(ass_tracker)
+        test_tracker.cases['zip'].install = True
+    except Exception as e:
+        test_tracker.cases['zip'].install = False
+        print(f"zip archive installation failed: {e}")
 
-    # # Test package removal
-    # try:
-    #     await test_package_removal()
-    #     # If we get here, all packages were removed successfully
-    #     for case in tracker.cases.values():
-    #         case.remove = True
-    # except Exception as e:
-    #     # If any package fails to remove, mark all as failed
-    #     for case in tracker.cases.values():
-    #         case.remove = False
-    #     print(f"Package removal failed: {e}")
 
-    # Always show the test report, even if something failed
-    test_tracker.report()
-    
-    # Check if any tests failed
-    failed_tests = any(
-        any(val is False for val in [case.install, case.run, case.remove])
-        for case in test_tracker.cases.values()
-    )
-    
-    if failed_tests:
-        print("\nSome tests failed - check the report above for details")
-        sys.exit(1)  # Return failure exit code
-    else:
-        print("\nAll tests completed successfully! 🎉")
-        sys.exit(0)  # Return success exit code
 
-async def cleanup():
-    """Clean up test artifacts in a platform-safe way"""
-    paths_to_clean = [
-        Path("test/zig-out"),
-        Path("test/archives"),
-        Path("test/.zig-cache"),
-        Path("popaman")
-    ]
-    
+async def cleanup_paths(paths_to_clean):
+    """Clean up specified paths in a platform-safe way"""
     for path in paths_to_clean:
         try:
             if path.exists():
@@ -426,9 +617,29 @@ async def cleanup():
         except Exception as e:
             print(f"Warning: Failed to clean {path}: {e}")
 
+async def cleanup():
+    """Clean up test artifacts in a platform-safe way"""
+    paths_to_clean = [
+        Path("test/zig-out"),
+        Path("test/archives"),
+        Path("test/.zig-cache"),
+        Path("popaman")
+    ]
+    await cleanup_paths(paths_to_clean)
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Test script for Popaman')
+    parser.add_argument('--clean', action='store_true', help='Clean up test artifacts')
+    return parser.parse_args()
+
 async def main():
+    args = parse_args()
     test_tracker = TestTracker()
-    dir_tracker = AssetTracker()
+    ass_tracker = AssetTracker()
+
+    if args.clean:
+        await cleanup()
+        return
 
     print("Testing Popaman...")
     try:
@@ -440,37 +651,78 @@ async def main():
             print(f"Error: {e}")
 
         try:
-            await install_popaman(dir_tracker)
+            await install_popaman(ass_tracker)
         except Exception as e:
             test_tracker.cases['dir'].install = False
             print(f"Error: {e}")
 
         try:
-            await build_test_package(dir_tracker)
+            await build_test_package(ass_tracker)
         except Exception as e:
             test_tracker.cases['dir'].install = False
             print(f"Error: {e}")
 
         print("Creating test archives...")
         try:
-            await create_test_archives(dir_tracker)
+            await create_test_archives(ass_tracker)
         except Exception as e:
             test_tracker.cases['dir'].install = False
             print(f"Error: {e}")
     
         print("Testing installation...")
         try:
-            await test_installation(dir_tracker,test_tracker)
+            await test_installation(ass_tracker,test_tracker)
         except Exception as e:
             test_tracker.cases['dir'].install = False
             print(f"Error: {e}")
 
+        # Test all package execution
+        try:
+            await test_package_running(ass_tracker)
+            # If we get here, all packages ran successfully
+            for case in test_tracker.cases.values():
+                case.run = True
+        except Exception as e:
+            # If any package fails to run, mark all as failed
+            # (since we can't easily tell which one failed)
+            for case in test_tracker.cases.values():
+                case.run = False
+            print(f"Package execution failed: {e}")
+
+        # Test package removal
+        try:
+            await test_package_removal(ass_tracker)
+            # If we get here, all packages were removed successfully
+            for case in test_tracker.cases.values():
+                case.remove = True
+        except Exception as e:
+            # If any package fails to remove, mark all as failed
+            for case in test_tracker.cases.values():
+                case.remove = False
+            print(f"Package removal failed: {e}")
+
+        # Always show the test report, even if something failed
+        test_tracker.report()
+        
+        # Check if any tests failed
+        failed_tests = any(
+            any(val is False for val in [case.install, case.run, case.remove])
+            for case in test_tracker.cases.values()
+        )
+        
+        if failed_tests:
+            print("\nSome tests failed - check the report above for details")
+            sys.exit(1)  # Return failure exit code
+        else:
+            print("\nAll tests completed successfully! 🎉")
+            sys.exit(0)  # Return success exit code
+
     finally:
         print("Cleaning up...")
-        # try:
-        #     await cleanup()
-        # except Exception as e:
-        #     print(f"Cleanup error: {e}")
+        try:
+            await cleanup()
+        except Exception as e:
+            print(f"Cleanup error: {e}")
 
 
 if __name__ == "__main__":

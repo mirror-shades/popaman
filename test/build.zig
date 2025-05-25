@@ -10,8 +10,13 @@ pub fn build(b: *std.Build) void {
         .optimize = b.standardOptimizeOption(.{}),
     });
 
-    const install_artifact = b.addInstallArtifact(exe, .{
-        .dest_dir = .{ .override = .prefix },
+    const target_output = b.addInstallArtifact(exe, .{
+        .dest_dir = .{
+            .override = .{
+                .custom = "test-package",
+            },
+        },
     });
-    b.getInstallStep().dependOn(&install_artifact.step);
+
+    b.getInstallStep().dependOn(&target_output.step);
 }

@@ -438,8 +438,8 @@ fn createGlobalScript(allocator: std.mem.Allocator, exe_dir: []const u8, keyword
 fn determine_if_local_dir(package_path: []const u8) !PackageSource {
     // Check if it's a local directory
     var dir = std.fs.cwd().openDir(package_path, .{ .iterate = true }) catch {
-        Reporting.throwError("Package directory does not exist: {s}\n", .{package_path}, Err.FileNotFound);
-        return Err.FileNotFound;
+        // we will figure out what the source is later
+        return PackageSource.Unknown;
     };
     dir.close();
     return PackageSource.Dir;
@@ -452,13 +452,13 @@ fn determine_source_type(package_path: []const u8) !PackageSource {
         std.debug.print("Package is a url\n", .{});
         return PackageSource.URL;
     }
-    else if (std.mem.endsWith(u8, package_path, ".7z")) {
+    else if (std.mem.endsWith(u8, package_path, ".7z") or 
+             std.mem.endsWith(u8, package_path, ".zip")) {
         return PackageSource.Compressed;
     }
     //to be added later
     else if (std.mem.endsWith(u8, package_path, ".tar") or 
              std.mem.endsWith(u8, package_path, ".gz") or 
-             std.mem.endsWith(u8, package_path, ".zip") or 
              std.mem.endsWith(u8, package_path, ".rar")) {
         return PackageSource.Unknown;
     }
@@ -469,6 +469,21 @@ fn determine_source_type(package_path: []const u8) !PackageSource {
         return PackageSource.Exe;
     }
     else {
+        // Check if file exists and has executable permissions (for Linux)
+        const file = std.fs.cwd().openFile(package_path, .{}) catch {
+            return PackageSource.Unknown;
+        };
+        defer file.close();
+        
+        const stat = file.stat() catch {
+            return PackageSource.Unknown;
+        };
+        
+        // Check if file has executable permissions
+        if (stat.mode & 0o111 != 0) {
+            return PackageSource.Exe;
+        }
+        
         return PackageSource.Unknown;
     }
 }
