@@ -1,8 +1,7 @@
-//this is the file that will run the popaman executable
-// it should check args and run the appropriate command
-
 const std = @import("std");
 const cmd_helper = @import("cmd_helper.zig");
+const Reporting = @import("../utils/reporting.zig");
+const Err = @import("../utils/error.zig").ErrorType;
 
 // Define the root structure
 const PackageFile = struct {
@@ -439,7 +438,8 @@ fn createGlobalScript(allocator: std.mem.Allocator, exe_dir: []const u8, keyword
 fn determine_if_local_dir(package_path: []const u8) !PackageSource {
     // Check if it's a local directory
     var dir = std.fs.cwd().openDir(package_path, .{ .iterate = true }) catch {
-        return PackageSource.Unknown;
+        Reporting.throwError("Package directory does not exist: {s}\n", .{package_path}, Err.FileNotFound);
+        return Err.FileNotFound;
     };
     dir.close();
     return PackageSource.Dir;

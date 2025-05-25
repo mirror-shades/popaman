@@ -11,11 +11,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const install_artifact = b.addInstallArtifact(exe, .{
-        .dest_dir = .{ .custom = "test" },
+        .dest_dir = .{ .override = .prefix },
     });
     b.getInstallStep().dependOn(&install_artifact.step);
-
-    // Add test step
-    const test_step = b.step("test", "Run the test package");
-    test_step.dependOn(&install_artifact.step);
 }
