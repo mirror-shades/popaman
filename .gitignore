@@ -1,3 +1,6 @@
 popaman/
 release/
 install-popaman.exe
+zig-out/
+.zig-cache/
+popaman/
