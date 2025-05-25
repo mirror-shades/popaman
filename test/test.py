@@ -131,13 +131,25 @@ async def run_command(command, input_text=None):
         args = command
     
     try:
-        process = await asyncio.create_subprocess_exec(
-            *args,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            shell=False
-        )
+        # On Windows, we need to use shell=True for .exe files
+        if os.name == 'nt' and any(arg.endswith('.exe') for arg in args):
+            # Convert list to string for shell=True
+            shell_cmd = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in args)
+            process = await asyncio.create_subprocess_shell(
+                shell_cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                shell=True
+            )
+        else:
+            process = await asyncio.create_subprocess_exec(
+                *args,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                shell=False
+            )
         
         if input_text:
             # Split input into lines and send each line
@@ -292,11 +304,15 @@ async def test_package_installation_from_dir(ass_tracker):
     if not test_package_dir.exists():
         raise RuntimeError(f"Test package directory not found at {test_package_dir}")
     
-    print("\nTesting package installation...")
+    print("\nTesting directory package installation...")
     try:
         inputs = b'1\ntest-hello\nthis is optional\n'
-        # Use str() to ensure proper path formatting
-        command = f'"{str(popaman_exe.absolute())}" install "{str(test_package_dir.absolute())}"'
+        # Use list command to avoid path quoting issues
+        command = [
+            str(popaman_exe.absolute()),
+            "install",
+            str(test_package_dir.absolute())
+        ]
         returncode, stdout, stderr = await run_command(
             command,
             input_text=inputs
@@ -317,7 +333,7 @@ async def test_package_installation_from_dir(ass_tracker):
     print("Verification complete")
 
 async def test_package_linking(ass_tracker):
-    print("\nTesting package installation...")
+    print("\nTesting linked package installation...")
     popaman_exe = ass_tracker.get_file('popaman_exe')
     if not popaman_exe:
         raise RuntimeError("popaman_exe file not set")
@@ -333,8 +349,12 @@ async def test_package_linking(ass_tracker):
         raise RuntimeError(f"Test package directory not found at {test_package_dir}")
     try:
         inputs = b'1\ntest-hello-link\nthis is optional\n'
-        # Use str() to ensure proper path formatting
-        command = f'"{str(popaman_exe.absolute())}" link "{str(test_package_dir.absolute())}"'
+        # Use list command to avoid path quoting issues
+        command = [
+            str(popaman_exe.absolute()),
+            "link",
+            str(test_package_dir.absolute())
+        ]
         returncode, stdout, stderr = await run_command(
             command,
             input_text=inputs
@@ -355,7 +375,7 @@ async def test_package_linking(ass_tracker):
     print("Verification complete")
 
 async def test_package_installation_from_7z(ass_tracker):
-    print("\nTesting package installation...")
+    print("\nTesting 7z package installation...")
     popaman_exe = ass_tracker.get_file('popaman_exe')
     if not popaman_exe:
         raise RuntimeError("popaman_exe file not set")
@@ -372,7 +392,12 @@ async def test_package_installation_from_7z(ass_tracker):
     
     try:
         inputs = b'1\ntest-hello-7z\nthis is optional\n'
-        command = f'"{str(popaman_exe.absolute())}" install "{str(test_pkg_path.absolute())}"'
+        # Use list command to avoid path quoting issues
+        command = [
+            str(popaman_exe.absolute()),
+            "install",
+            str(test_pkg_path.absolute())
+        ]
         returncode, stdout, stderr = await run_command(
             command,
             input_text=inputs
@@ -392,7 +417,7 @@ async def test_package_installation_from_7z(ass_tracker):
     print("Verification complete")
 
 async def test_package_installation_from_zip(ass_tracker):
-    print("\nTesting package installation...")
+    print("\nTesting zip package installation...")
     popaman_exe = ass_tracker.get_file('popaman_exe')
     if not popaman_exe:
         raise RuntimeError("popaman_exe file not set")
@@ -409,7 +434,12 @@ async def test_package_installation_from_zip(ass_tracker):
     
     try:
         inputs = b'1\ntest-hello-zip\nthis is optional\n'
-        command = f'"{str(popaman_exe.absolute())}" install "{str(test_pkg_path.absolute())}"'
+        # Use list command to avoid path quoting issues
+        command = [
+            str(popaman_exe.absolute()),
+            "install",
+            str(test_pkg_path.absolute())
+        ]
         returncode, stdout, stderr = await run_command(
             command,
             input_text=inputs
@@ -428,8 +458,6 @@ async def test_package_installation_from_zip(ass_tracker):
             "Package not found in packages.json"
     print("Verification complete")
 
-
-
 async def test_package_removal(ass_tracker):
     print("\nTesting package removal...")
     popaman_exe = ass_tracker.get_file('popaman_exe')
@@ -442,8 +470,12 @@ async def test_package_removal(ass_tracker):
     # Add delays between removals
     for pkg in ['test-hello', 'test-hello-link', 'test-hello-exe', 
                 'test-hello-7z', 'test-hello-zip']: 
-        # Use proper path formatting with quotes for Windows paths
-        command = f'"{str(popaman_exe.absolute())}" remove {pkg}'
+        # Use list command to avoid path quoting issues
+        command = [
+            str(popaman_exe.absolute()),
+            "remove",
+            pkg
+        ]
         returncode, stdout, stderr = await run_command(
             command,
             input_text=None
@@ -479,11 +511,15 @@ async def test_package_installation_from_exe(ass_tracker):
     if not test_package_exe.exists():
         raise RuntimeError(f"Test package executable not found at {test_package_exe}")
     
-    print("\nTesting package installation...")
+    print("\nTesting executable package installation...")
     try:
         inputs = b'1\ntest-hello-exe\nthis is optional\n'
-        # Use str() to ensure proper path formatting
-        command = f'"{str(popaman_exe.absolute())}" install "{str(test_package_exe.absolute())}"'
+        # Use list command to avoid path quoting issues
+        command = [
+            str(popaman_exe.absolute()),
+            "install",
+            str(test_package_exe.absolute())
+        ]
         returncode, stdout, stderr = await run_command(
             command,
             input_text=inputs
@@ -525,8 +561,11 @@ async def test_package_running(ass_tracker):
         ]
         
         for pkg in packages:
-            # Use proper path formatting with quotes for Windows paths
-            command = f'"{str(popaman_exe.absolute())}" {pkg}'
+            # Use list command to avoid path quoting issues
+            command = [
+                str(popaman_exe.absolute()),
+                pkg
+            ]
             returncode, stdout, stderr = await run_command(
                 command,
                 input_text=None
@@ -641,7 +680,7 @@ async def main():
         await cleanup()
         return
 
-    print("Testing Popaman...")
+    print("++ Testing Popaman ++")
     try:
         print("Building test files...")
         try:
@@ -719,10 +758,10 @@ async def main():
 
     finally:
         print("Cleaning up...")
-        try:
-            await cleanup()
-        except Exception as e:
-            print(f"Cleanup error: {e}")
+        # try:
+        #     await cleanup()
+        # except Exception as e:
+        #     print(f"Cleanup error: {e}")
 
 
 if __name__ == "__main__":
