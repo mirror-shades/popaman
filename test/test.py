@@ -252,41 +252,55 @@ async def test_installation(tracker):
         print("\nAll tests completed successfully! 🎉")
         sys.exit(0)  # Return success exit code
 
+async def cleanup():
+    #delete ./zig-out ./archives ./.zig-cache ./popaman
+    shutil.rmtree(Path("test/zig-out"))
+    shutil.rmtree(Path("test/archives"))
+    shutil.rmtree(Path("test/.zig-cache"))
+    shutil.rmtree(Path("popaman"))
+
 async def main():
     tracker = TestTracker()
     print("Testing Popaman...")
-    print("Building test files...")
     try:
-        await build_installer()
-    except Exception as e:
-        tracker.cases['dir'].install = False
-        print(f"Error: {e}")
+        print("Building test files...")
+        try:
+            await build_installer()
+        except Exception as e:
+            tracker.cases['dir'].install = False
+            print(f"Error: {e}")
 
-    try:
-        await install_popaman()
-    except Exception as e:
-        tracker.cases['dir'].install = False
-        print(f"Error: {e}")
+        try:
+            await install_popaman()
+        except Exception as e:
+            tracker.cases['dir'].install = False
+            print(f"Error: {e}")
 
-    try:
-        await build_test_package()
-    except Exception as e:
-        tracker.cases['dir'].install = False
-        print(f"Error: {e}")
+        try:
+            await build_test_package()
+        except Exception as e:
+            tracker.cases['dir'].install = False
+            print(f"Error: {e}")
 
-    print("Creating test archives...")
-    try:
-        await create_test_archives()
-    except Exception as e:
-        tracker.cases['dir'].install = False
-        print(f"Error: {e}")\
+        print("Creating test archives...")
+        try:
+            await create_test_archives()
+        except Exception as e:
+            tracker.cases['dir'].install = False
+            print(f"Error: {e}")
     
-    print("Testing installation...")
-    try:
-        await test_installation(tracker)
-    except Exception as e:
-        tracker.cases['dir'].install = False
-        print(f"Error: {e}")
+        print("Testing installation...")
+        try:
+            await test_installation(tracker)
+        except Exception as e:
+            tracker.cases['dir'].install = False
+            print(f"Error: {e}")
+    finally:
+        print("Cleaning up...")
+        try:
+            await cleanup()
+        except Exception as e:
+            print(f"Cleanup error: {e}")
 
 
 if __name__ == "__main__":
